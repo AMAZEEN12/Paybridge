@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayBridge</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">PayBridge</div>
+    <nav class="who" id="who" hidden>
+      <button class="icon" id="bell" type="button" aria-label="Notifications">&#128276;<span class="badge" id="badge" hidden>0</span></button>
+      <span id="whoName"></span>
+      <button class="link" id="logout" type="button">Log out</button>
+    </nav>
+  </header>
+
+  <main class="page">
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <!-- Signed out -->
+    <section id="authView" class="card narrow">
+      <div class="tabs" role="tablist">
+        <button class="tab active" id="tabLogin" type="button" role="tab">Sign in</button>
+        <button class="tab" id="tabRegister" type="button" role="tab">Create account</button>
+      </div>
+      <form id="loginForm" class="form">
+        <label>Email<input id="loginEmail" type="email" autocomplete="username" required></label>
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+      <form id="registerForm" class="form" hidden>
+        <label>Full name<input id="regName" type="text" autocomplete="name" required maxlength="120"></label>
+        <label>Email<input id="regEmail" type="email" autocomplete="email" required></label>
+        <label>Password <small>(8 characters or more)</small><input id="regPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
+        <button class="primary" type="submit">Create account</button>
+      </form>
+      <p class="hint">Demo app. Money here is test money.</p>
+    </section>
+
+    <!-- Signed in -->
+    <section id="appView" hidden>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-view="home" type="button">Home</button>
+        <button class="tab" data-view="send" type="button">Send money</button>
+        <button class="tab" data-view="history" type="button">History</button>
+        <button class="tab" data-view="alerts" type="button">Alerts</button>
+      </div>
+
+      <div id="homeView" class="stack">
+        <div class="card" id="pinCard" hidden>
+          <h2>Set your transaction PIN</h2>
+          <p class="hint">You need a 4-digit PIN to send money. It is separate from your password.</p>
+          <form id="pinForm" class="form row">
+            <input id="pinNew" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="4 digits" autocomplete="off" required>
+            <button class="primary" type="submit">Save PIN</button>
+          </form>
+        </div>
+        <div id="accountList" class="stack"></div>
+        <div class="row">
+          <button class="secondary" id="openAccount" type="button">Open a new account</button>
+        </div>
+      </div>
+
+      <div id="sendView" class="card" hidden>
+        <h2>Send money</h2>
+        <form id="sendForm" class="form">
+          <label>From
+            <select id="sendFrom" required></select>
+          </label>
+          <div class="segmented" role="radiogroup" aria-label="Where to">
+            <label><input type="radio" name="kind" value="INTERNAL" checked> To a PayBridge account</label>
+            <label><input type="radio" name="kind" value="EXTERNAL"> To a bank</label>
+          </div>
+          <label id="bankRow" hidden>Bank
+            <select id="sendBank"><option value="">Choose a bank</option></select>
+          </label>
+          <label>Account number
+            <input id="sendTo" type="text" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10 digits" required autocomplete="off">
+          </label>
+          <p class="resolved" id="resolved" hidden></p>
+          <label>Amount (&#8358;)
+            <input id="sendAmount" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+          </label>
+          <label>Narration <small>(optional)</small>
+            <input id="sendNarration" type="text" maxlength="140">
+          </label>
+          <div class="quote" id="quote" hidden></div>
+          <label>Transaction PIN
+            <input id="sendPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" required>
+          </label>
+          <button class="primary" id="sendButton" type="submit">Send</button>
+        </form>
+        <div class="result" id="sendResult" hidden></div>
+      </div>
+
+      <div id="historyView" class="card" hidden>
+        <h2>History</h2>
+        <label>Account
+          <select id="historyAccount"></select>
+        </label>
+        <ul class="list" id="historyList"></ul>
+        <div class="receipt" id="receipt" hidden></div>
+      </div>
+
+      <div id="alertsView" class="card" hidden>
+        <div class="row spread"><h2>Alerts</h2><button class="link" id="readAll" type="button">Mark all read</button></div>
+        <ul class="list" id="alertList"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

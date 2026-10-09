@@ -1,0 +1,18 @@
+﻿target/
+.idea/
+*.iml
+.vscode/
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs and diagnostic output
+*.log
+test-error.txt
+hs_err_pid*
+
+# Operating system files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,45 @@
+# Render Blueprint: a web service (built from the Dockerfile) plus a free Postgres database.
+# In Render: New > Blueprint > pick this repository. Render asks for the values marked sync: false.
+# Free-tier facts (check Render's pricing page, they change): the web service sleeps after 15 minutes
+# without traffic, and the free Postgres expires after 30 days.
+databases:
+  - name: paybridge-db
+    plan: free
+    databaseName: paybridge
+    user: paybridge
+
+services:
+  - type: web
+    name: paybridge
+    runtime: docker
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: paybridge-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: paybridge-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: paybridge-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: paybridge-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: paybridge-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true          # Render makes a long random value for you
+      - key: PAYSTACK_SECRET_KEY
+        sync: false                  # paste your Paystack TEST secret key in the Render dashboard (leave empty to use the fake gateway)
+      # After the first successful deploy, add this in the dashboard to use the real Paystack TEST gateway:
+      #   SPRING_PROFILES_ACTIVE = paystack
+      # To switch off the "Add test money" button on a public deployment:
+      #   PAYBRIDGE_DEV_FUNDING_ENABLED = false

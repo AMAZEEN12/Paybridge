@@ -1,0 +1,16 @@
+# Used by the integration tests (profile "test"). They need a real Postgres database.
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/paybridge_test}
+    username: ${TEST_DB_USER:postgres}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:}}
+
+paybridge:
+  jwt-secret: test-jwt-secret-test-jwt-secret-0123456789
+  scheduler:
+    enabled: false          # tests call verify themselves
+  paystack:
+    secret-key: test-paystack-secret
+  fraud:
+    velocity-max-transfers: 1000     # the concurrency test sends many transfers on purpose
+    max-daily-outgoing-kobo: 100000000000
