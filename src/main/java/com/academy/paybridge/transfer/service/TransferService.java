@@ -176,6 +176,9 @@ public class TransferService {
             resolved = gateway.resolveAccount(destinationAccount, bankCode);
             recipientCode = gateway.createRecipient(resolved.accountName(), destinationAccount, bankCode);
         } catch (GatewayRejectedException e) {
+            org.slf4j.LoggerFactory.getLogger(TransferService.class).warn(
+                    "Paystack refused account check/recipient for bank {} (HTTP {}): {}",
+                    bankCode, e.getHttpStatus(), e.getMessage());
             throw ApiException.unprocessable("ACCOUNT_NOT_RESOLVED",
                     "We could not find that bank account. Check the bank and account number.");
         } catch (GatewayUnavailableException e) {

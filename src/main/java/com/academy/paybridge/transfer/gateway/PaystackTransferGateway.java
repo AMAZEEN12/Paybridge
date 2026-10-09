@@ -151,6 +151,12 @@ public class PaystackTransferGateway implements TransferGateway {
         if (body == null || body.data() == null) {
             throw new GatewayUnavailableException("Paystack returned no transfer data.");
         }
+        if ("otp".equalsIgnoreCase(body.data().status())) {
+            // Paystack is holding the payout until someone approves it with an OTP. Nothing will ever settle it
+            // until that is switched off (dashboard: Settings > Preferences, transfer OTP) or finalized.
+            log.warn("Paystack transfer {} is waiting for OTP approval and will stay pending. "
+                    + "Disable the transfer OTP requirement in the Paystack dashboard.", reference);
+        }
         return new GatewayResult(map(body.data().status()), body.data().transferCode(), body.message());
     }
 

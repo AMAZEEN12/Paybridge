@@ -2,7 +2,7 @@ spring:
   application:
     name: paybridge
   datasource:
-    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:paybridge_v2}}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:paybridge}}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:}
     hikari:

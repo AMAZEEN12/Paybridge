@@ -313,12 +313,14 @@
     var tries = 0;
     pollTimer = setInterval(function () {
       tries += 1;
-      api('/transfers/' + reference).then(function (r) {
+      // POST /verify asks the provider for the real status and settles it. A plain GET only reads our own row,
+      // which never changes unless the webhook (or the background job) got there first.
+      api('/transfers/' + reference + '/verify', { method: 'POST' }).then(function (r) {
         if (r.data.status !== 'PENDING') {
           clearInterval(pollTimer);
           showResult(resultKind(r.data), describe(r.data));
           loadAccounts().then(prepareFromSelect);
-        } else if (tries >= 20) {
+        } else if (tries >= 30) {
           clearInterval(pollTimer);
           showResult('wait', 'Still processing. We will notify you when the bank confirms. Reference ' + reference);
         }

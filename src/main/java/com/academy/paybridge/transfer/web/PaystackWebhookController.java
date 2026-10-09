@@ -64,7 +64,9 @@ public class PaystackWebhookController {
     @PostMapping("/paystack")
     public ResponseEntity<Void> receive(@RequestBody byte[] rawBody,
                                         @RequestHeader(value = "x-paystack-signature", required = false) String signature) {
+        log.info("Paystack webhook hit (signature header present: {})", signature != null);
         if (!validSignature(rawBody, signature)) {
+            log.warn("Paystack webhook rejected: bad or missing signature. Is PAYSTACK_SECRET_KEY the same test key as the dashboard?");
             audit.recordIndependently("webhook", "WEBHOOK_REJECTED", null, "bad or missing signature");
             throw ApiException.unauthorized("INVALID_SIGNATURE", "Invalid signature.");
         }

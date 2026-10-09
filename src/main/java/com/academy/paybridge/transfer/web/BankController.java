@@ -25,12 +25,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/banks")
 @Tag(name = "5. Banks and name check")
 public class BankController {
+
+    private static final Logger log = LoggerFactory.getLogger(BankController.class);
 
     private final BankDirectory banks;
     private final TransferGateway gateway;
@@ -65,6 +70,14 @@ public class BankController {
             ResolvedAccount resolved = gateway.resolveAccount(request.accountNumber(), request.bankCode());
             return new ResolveResponse(resolved.accountName());
         } catch (GatewayRejectedException e) {
+            // Without this line the real reason (bad key, IP block, rate limit, unknown account) is invisible.
+            log.warn("Paystack refused name enquiry for bank {} (HTTP {}): {}",
+                    request.bankCode(), e.getHttpStatus(), e.getMessage());
+            if (e.getHttpStatus() == 401 || e.getHttpStatus() == 403 || e.getHttpStatus() == 429) {
+                // Our setup or Paystack limits are the problem, not the customer's account number.
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "PROVIDER_UNAVAILABLE",
+                        "We could not check that account right now. Please try again shortly.");
+            }
             throw ApiException.unprocessable("ACCOUNT_NOT_RESOLVED",
                     "We could not find that bank account. Check the bank and account number.");
         } catch (GatewayUnavailableException e) {

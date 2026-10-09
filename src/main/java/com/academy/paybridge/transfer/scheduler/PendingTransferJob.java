@@ -16,7 +16,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
- * The safety net behind the webhook. Every 30 seconds it asks the provider about payouts that are still
+ * The safety net behind the webhook. Every 15 seconds it asks the provider about payouts that are still
  * PENDING. It settles timeouts ("did it go or not?"), missed webhooks, and payouts that were debited
  * but never sent because the app crashed in between.
  *
@@ -41,13 +41,13 @@ public class PendingTransferJob {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "PT30S", initialDelayString = "PT30S")
+    @Scheduled(fixedDelayString = "PT15S", initialDelayString = "PT10S")
     public void verifyPending() {
         if (props.scheduler() != null && !props.scheduler().enabled()) {
             return;
         }
         List<Transfer> pending = transfers.findTop50ByStatusAndTypeAndCreatedAtBeforeOrderByCreatedAtAsc(
-                TransferStatus.PENDING, TransferType.EXTERNAL, clock.instant().minus(20, ChronoUnit.SECONDS));
+                TransferStatus.PENDING, TransferType.EXTERNAL, clock.instant().minus(10, ChronoUnit.SECONDS));
         for (Transfer t : pending) {
             try {
                 settlement.settleFromGateway(t.getReference());
