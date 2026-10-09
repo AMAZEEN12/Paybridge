@@ -60,6 +60,7 @@ paybridge:
     connect-timeout-ms: 3000
     read-timeout-ms: 10000
     resolve-mode: ${PAYSTACK_RESOLVE_MODE:auto}
+    payout-mode: ${PAYSTACK_PAYOUT_MODE:simulated}
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000

@@ -38,9 +38,12 @@ public class PaystackTransferGateway implements TransferGateway {
     private final RestClient client;
     /** True when name enquiry is answered here instead of by Paystack (see resolve-mode in application.yml). */
     private final boolean simulateResolve;
+    /** True when recipient, transfer and verify are answered here too (default with a test key). */
+    private final boolean simulatePayout;
 
     public PaystackTransferGateway(PaystackProperties props,
-                                   @Value("${paybridge.paystack.resolve-mode:auto}") String resolveMode) {
+                                   @Value("${paybridge.paystack.resolve-mode:auto}") String resolveMode,
+                                   @Value("${paybridge.paystack.payout-mode:simulated}") String payoutMode) {
         if (props.secretKey() == null || props.secretKey().isBlank()) {
             throw new IllegalStateException(
                     "PAYSTACK_SECRET_KEY must be set when the 'paystack' profile is active. Use your TEST secret key.");
@@ -51,8 +54,16 @@ public class PaystackTransferGateway implements TransferGateway {
         if (simulateResolve && !testKey) {
             throw new IllegalStateException("resolve-mode 'simulated' is only allowed with a TEST secret key (sk_test_...).");
         }
+        this.simulatePayout = simulateResolve && !"live".equalsIgnoreCase(payoutMode == null ? "" : payoutMode.trim());
+        if (simulateResolve && !simulatePayout) {
+            log.warn("PAYOUT MODE LIVE-TEST v3: name enquiry is simulated, but recipient/transfer/verify call Paystack (test mode). "
+                    + "Transfers and webhooks will appear on the Paystack dashboard.");
+        }
+        if (simulatePayout) {
+            log.warn("PAYOUT SIMULATION active: recipient, transfer and verify are answered locally. "
+                    + "Set PAYSTACK_PAYOUT_MODE=live to send them to Paystack (test mode) and receive webhooks.");
+        }
         if (simulateResolve) {
-            log.warn("PAYOUT SIMULATION v2 active: name enquiry, recipient, transfer and verify are all answered locally.");
             log.warn("Name enquiry is SIMULATED (test key). Paystack limits live bank lookups in test mode. "
                     + "Set PAYSTACK_RESOLVE_MODE=live to call Paystack for real.");
         }
@@ -130,7 +141,7 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public String createRecipient(String accountName, String accountNumber, String bankCode) {
-        if (simulateResolve) {
+        if (simulatePayout) {
             // Simulated payout mode: no call to Paystack, so test-mode account rules cannot reject the recipient.
             return "RCP_SIM_" + bankCode + "_" + accountNumber;
         }
@@ -157,7 +168,7 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public GatewayResult initiateTransfer(String reference, long amountKobo, String recipientCode, String reason) {
-        if (simulateResolve) {
+        if (simulatePayout) {
             // Paystack test transfers always succeed anyway, so in simulated mode we answer locally.
             return new GatewayResult(GatewayStatus.PENDING, "SIM_" + reference, "Queued (simulated)");
         }
@@ -184,7 +195,7 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public GatewayResult verifyTransfer(String reference) {
-        if (simulateResolve) {
+        if (simulatePayout) {
             return new GatewayResult(GatewayStatus.SUCCESS, "SIM_" + reference, "Paid (simulated)");
         }
         try {

@@ -54,14 +54,34 @@ public class Account {
         this.customerId = customerId;
     }
 
-    public Long getId() { return id; }
-    public String getAccountNumber() { return accountNumber; }
-    public Long getCustomerId() { return customerId; }
-    public long getBalanceKobo() { return balanceKobo; }
-    public void setBalanceKobo(long balanceKobo) { this.balanceKobo = balanceKobo; }
-    public AccountType getType() { return type; }
-    public AccountStatus getStatus() { return status; }
-    public void setStatus(AccountStatus status) { this.status = status; }
-    public long getVersion() { return version; }
-    public Instant getCreatedAt() { return createdAt; }
+    public Long getId() {
+        return id;
+    }
+    public String getAccountNumber() {
+        return accountNumber;
+    }
+    public Long getCustomerId() {
+        return customerId;
+    }
+    public long getBalanceKobo() {
+        return balanceKobo;
+    }
+    public void setBalanceKobo(long balanceKobo) {
+        this.balanceKobo = balanceKobo;
+    }
+    public AccountType getType() {
+        return type;
+    }
+    public AccountStatus getStatus() {
+        return status;
+    }
+    public void setStatus(AccountStatus status) {
+        this.status = status;
+    }
+    public long getVersion() {
+        return version;
+    }
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

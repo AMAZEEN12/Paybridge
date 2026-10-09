@@ -20,7 +20,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     List<Account> findByCustomerIdOrderByIdAsc(Long customerId);
 
-    /** SELECT ... FOR UPDATE. Anyone else asking for this row waits until our transaction ends. */
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Account a where a.accountNumber = :number")
     Optional<Account> findForUpdate(@Param("number") String number);
