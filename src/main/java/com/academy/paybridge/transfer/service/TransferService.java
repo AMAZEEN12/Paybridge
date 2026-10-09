@@ -39,17 +39,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Orchestrates the two kinds of transfer.
- *
- * INTERNAL (PayBridge account to PayBridge account) is all or nothing: one transaction.
- * EXTERNAL (payout to a bank through the gateway) cannot be one transaction, because the provider
- * is someone else's computer. So: resolve, reserve (debit and save PENDING, committed), call the provider
- * OUTSIDE any transaction, then settle to SUCCESSFUL or FAILED (with refund). See TransferSettlementService.
- *
- * This class itself is not @Transactional on purpose: it uses TransactionTemplate for the parts that must
- * be atomic, so the PIN check and the provider call can sit outside them.
- */
 @Service
 public class TransferService {
 
@@ -87,9 +76,6 @@ public class TransferService {
         this.zone = ZoneId.of(appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
     }
 
-    // =====================================================================================
-    // INTERNAL TRANSFER
-    // =====================================================================================
 
     public TransferResult transferInternal(Long customerId, String source, String destination, long amountKobo,
                                            String narration, String pin, String key) {
@@ -151,9 +137,7 @@ public class TransferService {
         return new TransferResult(t, false);
     }
 
-    // =====================================================================================
-    // EXTERNAL TRANSFER (payout to a bank)
-    // =====================================================================================
+
 
     public TransferResult transferExternal(Long customerId, String source, String bankCode, String destinationAccount,
                                            long amountKobo, String narration, String pin, String key) {
@@ -237,10 +221,6 @@ public class TransferService {
         return new TransferResult(t, false);
     }
 
-    // =====================================================================================
-    // READING, VERIFYING, QUOTING
-    // =====================================================================================
-
     /** Asks the provider about a pending payout. Only the owner of the source account may do this. */
     public Transfer verify(Long customerId, String reference) {
         Transfer t = getVisible(customerId, reference);
@@ -273,14 +253,7 @@ public class TransferService {
         return chargeCalculator.calculate(amountKobo, type);
     }
 
-    // =====================================================================================
-    // HELPERS
-    // =====================================================================================
 
-    /**
-     * Idempotency. Same key + same request = return the stored transfer. Same key + different request = refuse.
-     * The key belongs to the SOURCE account, so one customer can never replay another customer's transfer.
-     */
     private Optional<TransferResult> replayIfSeen(String source, String key, String hash) {
         Optional<Transfer> existing = transfers.findBySourceAccountNumberAndIdempotencyKey(source, key);
         if (existing.isEmpty()) {
@@ -293,10 +266,7 @@ public class TransferService {
         return Optional.of(new TransferResult(existing.get(), true));
     }
 
-    /**
-     * Runs the fraud rules. BLOCK refuses the transfer (the real reasons go to the audit log only).
-     * FLAG lets it through and returns true so the owner is warned.
-     */
+
     private boolean screen(Long customerId, String source, String destinationAccount, long amountKobo, String bankCode) {
         Instant now = clock.instant();
         Instant startOfDay = clock.instant().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant();
@@ -352,7 +322,6 @@ public class TransferService {
         }
     }
 
-    /** Our own reference: trf_ plus 32 hex characters (36 in total, within Paystack's 16 to 50 lowercase rule). */
     private static String newReference() {
         return "trf_" + UUID.randomUUID().toString().replace("-", "");
     }

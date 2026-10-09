@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-/** Request and response shapes for the customer endpoints. Secrets are masked in toString(). */
+
 public final class AuthDtos {
 
     private AuthDtos() {
@@ -17,6 +17,7 @@ public final class AuthDtos {
             @NotBlank @Size(min = 8, max = 72, message = "must be 8 to 72 characters") String password) {
         @Override
         public String toString() {
+
             return "RegisterRequest[email=" + email + "]";
         }
     }

@@ -27,6 +27,7 @@ public class JwtService {
     }
 
     public long ttlSeconds() {
+
         return props.jwtTtlMinutes() * 60L;
     }
 

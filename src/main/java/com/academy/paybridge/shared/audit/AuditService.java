@@ -20,6 +20,7 @@ public class AuditService {
     private final AuditLogRepository repository;
 
     public AuditService(AuditLogRepository repository) {
+
         this.repository = repository;
     }
 

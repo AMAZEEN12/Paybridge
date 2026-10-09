@@ -47,11 +47,25 @@ public class AuditLog {
         this.details = details;
     }
 
-    public Long getId() { return id; }
-    public Instant getCreatedAt() { return createdAt; }
-    public String getActor() { return actor; }
-    public String getAction() { return action; }
-    public String getReference() { return reference; }
-    public String getRequestId() { return requestId; }
-    public String getDetails() { return details; }
+    public Long getId() {
+        return id;
+    }
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+    public String getActor() {
+        return actor;
+    }
+    public String getAction() {
+        return action;
+    }
+    public String getReference() {
+        return reference;
+    }
+    public String getRequestId() {
+        return requestId;
+    }
+    public String getDetails() {
+        return details;
+    }
 }

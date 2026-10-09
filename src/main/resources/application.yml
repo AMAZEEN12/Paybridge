@@ -49,7 +49,7 @@ springdoc:
 paybridge:
   # Required. At least 32 characters. Set JWT_SECRET in the environment; never commit a real value.
   jwt-secret: ${JWT_SECRET}
-  jwt-ttl-minutes: 30
+  jwt-ttl-minutes: ${JWT_TTL_MINUTES:30}
   # Development-only "add test money" endpoint. Set to false once real funding exists.
   dev-funding-enabled: ${PAYBRIDGE_DEV_FUNDING_ENABLED:true}
   scheduler:
@@ -65,7 +65,7 @@ paybridge:
     vat-rate: 0.075
     stamp-duty-kobo: 5000
     stamp-duty-threshold-kobo: 1000000      # N10,000
-    fee-bands:                              # CBN 2026 circular; confirm with your lead
+    fee-bands:                              # CBN 2026 circular
       - up-to-kobo: 500000                  # up to N5,000
         fee-kobo: 0
       - up-to-kobo: 5000000                 # up to N50,000
