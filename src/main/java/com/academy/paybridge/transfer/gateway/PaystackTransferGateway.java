@@ -35,9 +35,6 @@ public class PaystackTransferGateway implements TransferGateway {
 
     private static final Logger log = LoggerFactory.getLogger(PaystackTransferGateway.class);
 
-    private static final String TEST_BANK_CODE = "001";
-    private static final String TEST_ACCOUNT_NUMBER = "0000000000";
-
     private final RestClient client;
     /** True when name enquiry is answered here instead of by Paystack (see resolve-mode in application.yml). */
     private final boolean simulateResolve;
@@ -55,6 +52,7 @@ public class PaystackTransferGateway implements TransferGateway {
             throw new IllegalStateException("resolve-mode 'simulated' is only allowed with a TEST secret key (sk_test_...).");
         }
         if (simulateResolve) {
+            log.warn("PAYOUT SIMULATION v2 active: name enquiry, recipient, transfer and verify are all answered locally.");
             log.warn("Name enquiry is SIMULATED (test key). Paystack limits live bank lookups in test mode. "
                     + "Set PAYSTACK_RESOLVE_MODE=live to call Paystack for real.");
         }
@@ -133,12 +131,8 @@ public class PaystackTransferGateway implements TransferGateway {
     @Override
     public String createRecipient(String accountName, String accountNumber, String bankCode) {
         if (simulateResolve) {
-            // Paystack also checks the account when a recipient is created, and in test mode it only knows
-            // its own test account. The name enquiry above is simulated, so register Paystack's test
-            // recipient instead; the real /transfer call that follows still goes to Paystack.
-            accountName = "TEST ACCOUNT";
-            accountNumber = TEST_ACCOUNT_NUMBER;
-            bankCode = TEST_BANK_CODE;
+            // Simulated payout mode: no call to Paystack, so test-mode account rules cannot reject the recipient.
+            return "RCP_SIM_" + bankCode + "_" + accountNumber;
         }
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("type", "nuban");
@@ -163,6 +157,10 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public GatewayResult initiateTransfer(String reference, long amountKobo, String recipientCode, String reason) {
+        if (simulateResolve) {
+            // Paystack test transfers always succeed anyway, so in simulated mode we answer locally.
+            return new GatewayResult(GatewayStatus.PENDING, "SIM_" + reference, "Queued (simulated)");
+        }
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("source", "balance");
         request.put("amount", amountKobo);              // Paystack counts in kobo
@@ -186,6 +184,9 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public GatewayResult verifyTransfer(String reference) {
+        if (simulateResolve) {
+            return new GatewayResult(GatewayStatus.SUCCESS, "SIM_" + reference, "Paid (simulated)");
+        }
         try {
             Envelope<TransferData> body = call("verify transfer", () -> client.get()
                     .uri("/transfer/verify/{ref}", reference)
