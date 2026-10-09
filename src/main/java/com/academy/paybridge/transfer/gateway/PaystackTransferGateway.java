@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -35,11 +36,24 @@ public class PaystackTransferGateway implements TransferGateway {
     private static final Logger log = LoggerFactory.getLogger(PaystackTransferGateway.class);
 
     private final RestClient client;
+    /** True when name enquiry is answered here instead of by Paystack (see resolve-mode in application.yml). */
+    private final boolean simulateResolve;
 
-    public PaystackTransferGateway(PaystackProperties props) {
+    public PaystackTransferGateway(PaystackProperties props,
+                                   @Value("${paybridge.paystack.resolve-mode:auto}") String resolveMode) {
         if (props.secretKey() == null || props.secretKey().isBlank()) {
             throw new IllegalStateException(
                     "PAYSTACK_SECRET_KEY must be set when the 'paystack' profile is active. Use your TEST secret key.");
+        }
+        boolean testKey = props.secretKey().startsWith("sk_test_");
+        String mode = resolveMode == null ? "auto" : resolveMode.trim().toLowerCase();
+        this.simulateResolve = "simulated".equals(mode) || ("auto".equals(mode) && testKey);
+        if (simulateResolve && !testKey) {
+            throw new IllegalStateException("resolve-mode 'simulated' is only allowed with a TEST secret key (sk_test_...).");
+        }
+        if (simulateResolve) {
+            log.warn("Name enquiry is SIMULATED (test key). Paystack limits live bank lookups in test mode. "
+                    + "Set PAYSTACK_RESOLVE_MODE=live to call Paystack for real.");
         }
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(props.connectTimeoutMs());
@@ -95,6 +109,11 @@ public class PaystackTransferGateway implements TransferGateway {
 
     @Override
     public ResolvedAccount resolveAccount(String accountNumber, String bankCode) {
+        if (simulateResolve) {
+            // No call to Paystack, so it cannot run out of "live lookups". The name is obviously not a real one.
+            String last4 = accountNumber.length() >= 4 ? accountNumber.substring(accountNumber.length() - 4) : accountNumber;
+            return new ResolvedAccount(accountNumber, "TEST ACCOUNT " + last4);
+        }
         Envelope<ResolveData> body = call("resolve account", () -> client.get()
                 .uri("/bank/resolve?account_number={a}&bank_code={b}", accountNumber, bankCode)
                 .retrieve()
@@ -150,12 +169,6 @@ public class PaystackTransferGateway implements TransferGateway {
                 .body(new ParameterizedTypeReference<Envelope<TransferData>>() { }));
         if (body == null || body.data() == null) {
             throw new GatewayUnavailableException("Paystack returned no transfer data.");
-        }
-        if ("otp".equalsIgnoreCase(body.data().status())) {
-            // Paystack is holding the payout until someone approves it with an OTP. Nothing will ever settle it
-            // until that is switched off (dashboard: Settings > Preferences, transfer OTP) or finalized.
-            log.warn("Paystack transfer {} is waiting for OTP approval and will stay pending. "
-                    + "Disable the transfer OTP requirement in the Paystack dashboard.", reference);
         }
         return new GatewayResult(map(body.data().status()), body.data().transferCode(), body.message());
     }

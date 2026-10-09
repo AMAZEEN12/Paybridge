@@ -59,6 +59,7 @@ paybridge:
     secret-key: ${PAYSTACK_SECRET_KEY:}
     connect-timeout-ms: 3000
     read-timeout-ms: 10000
+    resolve-mode: ${PAYSTACK_RESOLVE_MODE:auto}
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000
