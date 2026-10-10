@@ -66,7 +66,7 @@ The fake gateway is on unless the `paystack` profile is active. Use these as the
 - Settlement locks the transfer row and only changes a `PENDING` transfer, so a webhook, the verify button and the 30-second
   job can all race and the refund still happens at most once.
 
-## Charges (confirm the numbers before you present them)
+## Charges 
 
 All in `application.yml` under `paybridge.charges`, in kobo. Rules as reported in the news, not legal advice:
 
