@@ -5,7 +5,7 @@ through Paystack (test mode), and now multi-currency wallets. Test mode only, no
 folder that contains `pom.xml`.
 
 ## Commands
-- Run: `mvn spring-boot:run` (needs `DB_PASSWORD` and `JWT_SECRET`; see `.env.example`; Postgres database `paybridge`).
+- Run: `mvn spring-boot:run` (needs `DB_PASSWORD` and `JWT_SECRET`; see `.env.example`; Postgres database `paybridge_v3`).
 - Unit tests: `mvn test` (no database needed).
 - Integration tests: `PayBridgeFlowTest` needs a Postgres database named `paybridge_test` (`createdb paybridge_test`).
   It **skips itself** if the database is missing, and a skipped test is not a pass.
