@@ -7,7 +7,7 @@ folder that contains `pom.xml`.
 ## Commands
 - Run: `mvn spring-boot:run` (needs `DB_PASSWORD` and `JWT_SECRET`; see `.env.example`; Postgres database `paybridge_v3`).
 - Unit tests: `mvn test` (no database needed).
-- Integration tests: `PayBridgeFlowTest` needs a Postgres database named `paybridge_test` (`createdb paybridge_test`).
+- Integration tests: `PayBridgeFlowTest` needs a Postgres database named `paybridge_test1` (`createdb paybridge_test1`).
   It **skips itself** if the database is missing, and a skipped test is not a pass.
 - Web page `http://localhost:8080/`, Swagger `/swagger-ui.html`, health `/actuator/health`.
 
@@ -51,7 +51,7 @@ We follow the AI-native SDLC: `intent.md`, then `spec.md`, then `plan.md`, then 
 Hooks run on every tool call. If one blocks you, read its message and follow it; do not work around it.
 - Edits to `V1` to `V7` migrations are blocked; a new migration must be numbered above every existing one.
 - Writing `.env` files or anything that looks like a real Paystack key is blocked.
-- `-DskipTests`, force pushes, pushes to `main`, destructive database commands outside `paybridge_test`, and commits
+- `-DskipTests`, force pushes, pushes to `main`, destructive database commands outside `paybridge_test1`, and commits
   containing secrets are blocked.
 - After each edit, imports that break the module rule or use `double`/`float` for money (in `account`, `ledger`, `fx`,
   `shared/money`) are rejected.
@@ -59,7 +59,7 @@ Hooks run on every tool call. If one blocks you, read its message and follow it;
   edited, new ones can. After changing hooks, run `bash .claude/hooks/selftest.sh`.
 
 ## Verifying your work
-Run `mvn test`, with the `paybridge_test` database present so the integration tests actually run, before reporting
+Run `mvn test`, with the `paybridge_test1` database present so the integration tests actually run, before reporting
 any task done, and paste the output. If a test fails, fix the code, not the test. Never skip or delete a failing test.
 
 ## Things Claude gets wrong (add a line each time a mistake repeats)
