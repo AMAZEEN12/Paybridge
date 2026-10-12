@@ -29,4 +29,25 @@ public interface LedgerApi {
 
     /** Payout failed: EXT:IN_FLIGHT goes back to the customer, charges included. */
     void recordPayoutRefund(String reference, String source, long totalDebitKobo);
+
+    /**
+     * The ledger key of one wallet: "<account_number>:<currency>", for example "2000000001:NGN".
+     * The EXT: accounts are not wallets and keep their names.
+     */
+    static String walletKey(String accountNumber, String currency) {
+        return accountNumber.startsWith("EXT:") ? accountNumber : accountNumber + ":" + currency;
+    }
+
+    /** The reverse, for messages: drops the ":NGN" suffix. Plain account numbers and EXT: names come back unchanged. */
+    static String accountNumberOf(String key) {
+        int colon = key.lastIndexOf(':');
+        return (key.startsWith("EXT:") || colon < 0) ? key : key.substring(0, colon);
+    }
+
+    /**
+     * The ledger key of one wallet: "<account_number>:<currency>", for example "2000000001:NGN".
+     * The EXT: accounts are not wallets and keep their names.
+     */
+
+    /** The reverse, for messages: drops the ":NGN" suffix. Plain account numbers and EXT: names come back unchanged. */
 }

@@ -33,8 +33,11 @@ public class LedgerEntry {
     @Column(nullable = false, updatable = false)
     private Direction direction;
 
-    @Column(name = "amount_kobo", nullable = false, updatable = false)
-    private long amountKobo;
+    @Column(name = "amount_minor", nullable = false, updatable = false)
+    private long amountMinor;
+
+    @Column(nullable = false, updatable = false, length = 3)
+    private String currency;
 
     @Column(name = "entry_type", nullable = false, updatable = false)
     private String entryType;
@@ -46,12 +49,13 @@ public class LedgerEntry {
     }
 
     public LedgerEntry(String journalKey, String reference, String accountNumber, Direction direction,
-                       long amountKobo, String entryType, Instant now) {
+                       long amountMinor, String currency, String entryType, Instant now) {
         this.journalKey = journalKey;
         this.reference = reference;
         this.accountNumber = accountNumber;
         this.direction = direction;
-        this.amountKobo = amountKobo;
+        this.amountMinor = amountMinor;
+        this.currency = currency;
         this.entryType = entryType;
         this.createdAt = now;
     }
@@ -61,7 +65,8 @@ public class LedgerEntry {
     public String getReference() { return reference; }
     public String getAccountNumber() { return accountNumber; }
     public Direction getDirection() { return direction; }
-    public long getAmountKobo() { return amountKobo; }
+    public long getAmountMinor() { return amountMinor; }
+    public String getCurrency() { return currency; }
     public String getEntryType() { return entryType; }
     public Instant getCreatedAt() { return createdAt; }
 }
