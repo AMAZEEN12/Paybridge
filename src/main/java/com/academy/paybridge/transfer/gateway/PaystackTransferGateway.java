@@ -200,6 +200,11 @@ public class PaystackTransferGateway implements TransferGateway {
         if (body == null || body.data() == null) {
             throw new GatewayUnavailableException("Paystack returned no transfer data.");
         }
+        log.info("Paystack accepted transfer {} with status '{}'", reference, body.data().status());
+        if ("otp".equalsIgnoreCase(body.data().status())) {
+            log.warn("Paystack is waiting for an OTP before it sends transfer {}. In the Paystack dashboard (test mode) turn off "
+                    + "the setting that asks you to confirm transfers with an OTP, then try again. Until then it stays PENDING.", reference);
+        }
         return new GatewayResult(map(body.data().status()), body.data().transferCode(), body.message());
     }
 

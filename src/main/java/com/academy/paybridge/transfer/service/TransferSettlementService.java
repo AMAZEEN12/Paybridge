@@ -68,17 +68,29 @@ public class TransferSettlementService {
         try {
             GatewayResult result = gateway.initiateTransfer(t.getReference(), t.getAmountKobo(),
                     t.getRecipientCode(), t.getNarration());
-            audit.recordIndependently("system", "GATEWAY_CALLED", reference, "status " + result.status());
+            audit.recordIndependently("system", "GATEWAY_CALLED", reference,
+                    "status " + result.status() + (result.message() == null ? "" : ": " + cut(result.message())));
             apply(reference, result);
         } catch (GatewayRejectedException e) {
             // A clear "no": the money did not go, so giving it back is safe.
-            audit.recordIndependently("paystack", "GATEWAY_REJECTED", reference, "http " + e.getHttpStatus());
+            audit.recordIndependently("paystack", "GATEWAY_REJECTED", reference,
+                    "http " + e.getHttpStatus() + ": " + cut(e.getMessage()));
+            log.warn("Paystack rejected transfer {} (HTTP {}): {}", reference, e.getHttpStatus(), cut(e.getMessage()));
             settle(reference, false, "Rejected by provider");
         } catch (GatewayUnavailableException e) {
             // Unknown outcome. DO NOT refund. Leave it pending; the verify job will find out.
             audit.recordIndependently("system", "GATEWAY_OUTCOME_UNKNOWN", reference, e.getMessage());
             markNote(reference, "Outcome unknown (provider did not answer). Will verify.");
         }
+    }
+
+    /** Keeps a provider message short enough for the audit log. It never contains our secret key. */
+    private static String cut(String text) {
+        if (text == null) {
+            return "";
+        }
+        String one = text.replaceAll("\\s+", " ").trim();
+        return one.length() > 200 ? one.substring(0, 200) : one;
     }
 
     /** Asks the provider for the truth about a pending transfer and settles it. Used by verify, webhook and job. */
