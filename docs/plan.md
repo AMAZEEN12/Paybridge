@@ -1,7 +1,20 @@
 # Plan 001: Multi-currency wallets and conversion
 
-Status: draft      Date: 2026-10-13      Author: Nwafor Blessing
+Status: in progress      Date: 2026-10-13      Author: Nwafor Blessing
 Implements: `spec.md` (from `001-multi-currency-wallets.md`)
+
+## Progress (last updated 2026-10-13)
+
+| Step | What | Status |
+|------|------|--------|
+| 0 | Baseline and guardrails | Build green. Hooks self-test not confirmed. |
+| 1 | Wallets, NGN only | Code done, all four commits green (V8 reset + ledger columns; V9 wallets + account module; ledger wallet keys). Left: hand check on the web page, review, deploy. |
+| 2 | Currencies and per-currency ledger | Not started |
+| 3 | Sign-up with country and the single account | Not started |
+| 4 | Swap, park and receive-only wallets | Not started |
+| 5 | Rates (parallel track) | Not started |
+| 6 | Quotes and conversion | Not started |
+| 7 | Convert screen, clean-up and release | Not started |
 
 This plan was drafted from a read of the code and should be checked in Claude Code plan mode against the real
 repository before the first step starts. Any step that departs from this plan updates this file in the same commit.
@@ -95,6 +108,31 @@ editing `V3__transfers.sql`).
 
 **Done when:** all of the above pass, the web page works by hand (register, open account, add test money, send,
 payout to the fake bank), and a PR review confirms no module bypasses an `api/` package. **Deploy.**
+
+**Commit sequence (as built).** Four small commits on `step-1-wallets`, each meant to leave the suite green:
+(1) V8 reset + ledger columns, (2) V9 wallets, (3) account module, (4) ledger module.
+*Departure, commit 1:* renaming `ledger_entries.amount_kobo` in V8 breaks the `LedgerEntry` mapping immediately
+(`ddl-auto: validate`), so commit 1 also carries the minimal ledger mapping change: `LedgerEntry`
+(`amountMinor`, `currency`), the three column names in `LedgerEntryRepository`, and `LedgerService` passing `"NGN"`.
+Commit 4 keeps the rest of the ledger work (wallet keys `<account_number>:NGN`, reconciliation, messages).
+*Why V8's tests run in a scratch schema:* `V8MigrationTest` builds V1 to V7, adds old-style data and runs V8 in a
+throwaway schema, so the shared test database is never reset by the test itself.
+
+*Departure, commits 2 and 3 merged:* dropping `accounts.balance_kobo` in V9 breaks the `Account` mapping at once,
+so V9, `Wallet`, `WalletStatus`, `WalletRepository` and the `Account`/`AccountService` changes are one commit.
+`AccountApi.balances()` kept plain account-number keys until the ledger commit switched both sides to
+`<account_number>:NGN`. Locking: `lockInOrder`, `debit` and `credit` lock the NGN wallet row (sorted account
+numbers); `setFrozen` still locks the account row after taking the wallet lock, so a freeze waits for a transfer in
+flight. V9 copies existing balances into the wallets, so it is safe on a database that already holds money.
+*Departure, commit 4:* `walletKey` and `accountNumberOf` live on `LedgerApi` (not private in `LedgerService`), so
+`AccountApi.balances()` and the ledger share one definition of the `<account_number>:NGN` key. `LedgerService.post`
+writes the wallet key and `currency = NGN`; `ReconciliationRules` strips the suffix before `Money.maskAccount`.
+`AccountApi`, `AccountRepository`, `AccountView`, the DTOs, controllers and `app.js` did not change.
+*Tests added in step 1 (no existing assertion changed):* `V8MigrationTest`, `WalletsV9MigrationTest`,
+`AccountWalletsTest`, `ReconciliationWalletKeysTest`, `LedgerWalletKeysTest`.
+*Lesson:* the test database survives between runs and the ledger is append-only, so rows written under an older key
+shape make reconciliation fail. After a change to the ledger key shape, drop and recreate the test database.
+Deploy a step as a whole, never one commit at a time.
 
 **Risks:** hidden callers reading `balance_kobo` directly (grep for it before starting; spec concern B); the
 reconciliation job comparing keys of different shapes; the payout reserve/refund path, which writes through
