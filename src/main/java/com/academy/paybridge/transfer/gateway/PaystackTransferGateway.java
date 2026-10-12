@@ -40,14 +40,16 @@ public class PaystackTransferGateway implements TransferGateway {
     private final boolean simulateResolve;
     /** True when recipient, transfer and verify are answered here too (default with a test key). */
     private final boolean simulatePayout;
+    private final ResolveBudget budget;
 
-    public PaystackTransferGateway(PaystackProperties props,
+    public PaystackTransferGateway(PaystackProperties props, ResolveBudget budget,
                                    @Value("${paybridge.paystack.resolve-mode:auto}") String resolveMode,
                                    @Value("${paybridge.paystack.payout-mode:simulated}") String payoutMode) {
         if (props.secretKey() == null || props.secretKey().isBlank()) {
             throw new IllegalStateException(
                     "PAYSTACK_SECRET_KEY must be set when the 'paystack' profile is active. Use your TEST secret key.");
         }
+        this.budget = budget;
         boolean testKey = props.secretKey().startsWith("sk_test_");
         String mode = resolveMode == null ? "auto" : resolveMode.trim().toLowerCase();
         this.simulateResolve = "simulated".equals(mode) || ("auto".equals(mode) && testKey);
@@ -59,6 +61,8 @@ public class PaystackTransferGateway implements TransferGateway {
             log.warn("PAYOUT MODE LIVE-TEST v3: name enquiry is simulated, but recipient/transfer/verify call Paystack (test mode). "
                     + "Transfers and webhooks will appear on the Paystack dashboard.");
         }
+        log.warn("GATEWAY: real PaystackTransferGateway is active. Name lookup: {}. Payouts: {}.",
+                simulateResolve ? "SIMULATED" : "LIVE (Paystack)", simulatePayout ? "SIMULATED" : "LIVE (Paystack)");
         if (simulatePayout) {
             log.warn("PAYOUT SIMULATION active: recipient, transfer and verify are answered locally. "
                     + "Set PAYSTACK_PAYOUT_MODE=live to send them to Paystack (test mode) and receive webhooks.");
@@ -126,6 +130,11 @@ public class PaystackTransferGateway implements TransferGateway {
             String last4 = accountNumber.length() >= 4 ? accountNumber.substring(accountNumber.length() - 4) : accountNumber;
             return new ResolvedAccount(accountNumber, "TEST ACCOUNT " + last4);
         }
+        var known = budget.remembered(bankCode, accountNumber);
+        if (known.isPresent()) {
+            return new ResolvedAccount(accountNumber, known.get());   // no call to Paystack, no lookup spent
+        }
+        budget.spend();                                              // throws if today's allowance is gone
         Envelope<ResolveData> body = call("resolve account", () -> client.get()
                 .uri("/bank/resolve?account_number={a}&bank_code={b}", accountNumber, bankCode)
                 .retrieve()
@@ -136,6 +145,7 @@ public class PaystackTransferGateway implements TransferGateway {
         if (body == null || body.data() == null || body.data().accountName() == null) {
             throw new GatewayRejectedException("Could not resolve account name.", 422);
         }
+        budget.remember(bankCode, accountNumber, body.data().accountName());
         return new ResolvedAccount(accountNumber, body.data().accountName());
     }
 

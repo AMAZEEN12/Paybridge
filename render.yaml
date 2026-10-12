@@ -39,7 +39,11 @@ services:
         generateValue: true          # Render makes a long random value for you
       - key: PAYSTACK_SECRET_KEY
         sync: false                  # paste your Paystack TEST secret key in the Render dashboard (leave empty to use the fake gateway)
-      # After the first successful deploy, add this in the dashboard to use the real Paystack TEST gateway:
+      # Without these two the app uses a FAKE gateway and nothing reaches Paystack (the logs say "GATEWAY: FAKE").
+      # After the first successful deploy, add these in the dashboard:
       #   SPRING_PROFILES_ACTIVE = paystack
+      #   PAYSTACK_PAYOUT_MODE   = live     (recipient + transfer + verify go to Paystack TEST; webhooks arrive)
+      # Name lookups: leave PAYSTACK_RESOLVE_MODE unset to get a made-up name ("TEST ACCOUNT 1234") and spend no lookups,
+      # or set PAYSTACK_RESOLVE_MODE = live for real names (Paystack test mode allows about 3 a day; the app counts them).
       # To switch off the "Add test money" button on a public deployment:
       #   PAYBRIDGE_DEV_FUNDING_ENABLED = false

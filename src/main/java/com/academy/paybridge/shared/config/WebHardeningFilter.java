@@ -27,6 +27,11 @@ public class WebHardeningFilter extends OncePerRequestFilter {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Referrer-Policy", "no-referrer");
         String path = request.getRequestURI();
+        if (path.startsWith("/api/")) {
+            // Responses can hold balances, receipts and tokens. Tell browsers and proxies not to keep copies.
+            response.setHeader("Cache-Control", "no-store");
+            response.setHeader("Pragma", "no-cache");
+        }
         boolean swagger = path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs");
         if (!swagger) {
             // The web page uses only its own files, so nothing else may run.

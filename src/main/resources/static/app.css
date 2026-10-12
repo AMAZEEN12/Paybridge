@@ -80,3 +80,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .receipt { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; background: #fff; color: #000; }
   .receipt .noprint { display: none; }
 }
+
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+.pinbox { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; }
+.pinbox p { margin: 0; }

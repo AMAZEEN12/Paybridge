@@ -10,7 +10,7 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     properties:
       hibernate:
         jdbc:
@@ -49,11 +49,16 @@ springdoc:
 paybridge:
   # Required. At least 32 characters. Set JWT_SECRET in the environment; never commit a real value.
   jwt-secret: ${JWT_SECRET}
-  jwt-ttl-minutes: ${JWT_TTL_MINUTES:30}
+  jwt-ttl-minutes: 30
   # Development-only "add test money" endpoint. Set to false once real funding exists.
   dev-funding-enabled: ${PAYBRIDGE_DEV_FUNDING_ENABLED:true}
   scheduler:
     enabled: true
+  reconciliation:
+    enabled: ${PAYBRIDGE_RECONCILIATION_ENABLED:true}
+    interval: ${PAYBRIDGE_RECONCILIATION_INTERVAL:PT1H}
+    # Operators only. Leave empty to switch the endpoint off. Set a long random value in the environment; never commit it.
+    admin-key: ${PAYBRIDGE_RECONCILIATION_ADMIN_KEY:}
   paystack:
     base-url: https://api.paystack.co
     secret-key: ${PAYSTACK_SECRET_KEY:}
@@ -61,11 +66,14 @@ paybridge:
     read-timeout-ms: 10000
     resolve-mode: ${PAYSTACK_RESOLVE_MODE:auto}
     payout-mode: ${PAYSTACK_PAYOUT_MODE:simulated}
+    # Paystack gives a TEST account only a few live name lookups a day. We count them and remember names we have found.
+    resolve-daily-limit: ${PAYSTACK_RESOLVE_DAILY_LIMIT:3}      # 0 = no counter (use with a live key)
+    resolve-cache-hours: ${PAYSTACK_RESOLVE_CACHE_HOURS:24}
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000
     stamp-duty-threshold-kobo: 1000000      # N10,000
-    fee-bands:                              # CBN 2026 circular
+    fee-bands:                              # CBN 2026 circular; confirm with your lead
       - up-to-kobo: 500000                  # up to N5,000
         fee-kobo: 0
       - up-to-kobo: 5000000                 # up to N50,000

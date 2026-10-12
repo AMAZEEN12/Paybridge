@@ -24,11 +24,14 @@ public final class TransferDtos {
     public record InternalTransferRequest(
             @NotBlank @Pattern(regexp = "\\d{10}", message = "must be 10 digits") @Schema(example = "2000000001")
             String sourceAccountNumber,
+
             @NotBlank @Pattern(regexp = "\\d{10}", message = "must be 10 digits") @Schema(example = "2000000002")
             String destinationAccountNumber,
+
             @NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 2, message = "at most 2 decimal places")
             @Schema(example = "5000.00")
             BigDecimal amount,
+
             @Size(max = 140) @Schema(example = "Rent") String narration,
             @NotBlank @Pattern(regexp = "\\d{4}", message = "must be exactly 4 digits") @Schema(example = "1234")
             String pin) {

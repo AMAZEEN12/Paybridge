@@ -1,6 +1,8 @@
 package com.academy.paybridge.transfer;
 
 import com.academy.paybridge.account.repository.AccountRepository;
+import com.academy.paybridge.ledger.api.ReconciliationReport;
+import com.academy.paybridge.ledger.service.ReconciliationService;
 import com.academy.paybridge.shared.audit.AuditLogRepository;
 import com.academy.paybridge.support.TestDb;
 import org.junit.jupiter.api.BeforeAll;
@@ -54,6 +56,8 @@ class PayBridgeFlowTest {
     AuditLogRepository auditRepository;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    ReconciliationService reconciliation;
 
     @BeforeAll
     static void needDatabase() {
@@ -422,6 +426,27 @@ class PayBridgeFlowTest {
             unread = ((Number) get("/api/v1/notifications/unread-count", tunde.token()).body().get("unread")).longValue();
         }
         assertThat(unread).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void theLedgerStaysBalancedAfterEveryKindOfTransfer() {
+        User ada = newUser("100000");
+        User tunde = newUser("0");
+
+        assertThat(internal(ada, tunde.account(), "5000", key()).status()).isEqualTo(201);
+        Resp ok = external(ada, "033", "0123456789", "20000", key());                 // succeeds after verify
+        post("/api/v1/transfers/" + ok.body().get("reference") + "/verify", ada.token(), null, null);
+        Resp failed = external(ada, "214", "9912345678", "10000", key());             // fails after verify, refunded
+        post("/api/v1/transfers/" + failed.body().get("reference") + "/verify", ada.token(), null, null);
+        external(ada, "058", "7712345678", "3000", key());                            // rejected straight away, refunded
+        external(ada, "044", "8812345678", "4000", key());                            // times out: left in flight
+
+        ReconciliationReport report = reconciliation.run();
+
+        assertThat(report.problems()).isEmpty();
+        assertThat(report.ok()).isTrue();
+        assertThat(report.inFlightKobo()).isGreaterThan(0L);                          // the timed-out payout
+        assertThat(report.heldKobo() + report.inFlightKobo() + report.paidOutKobo()).isEqualTo(report.fundedKobo());
     }
 
     @Test

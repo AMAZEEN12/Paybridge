@@ -6,6 +6,7 @@ import com.academy.paybridge.compliance.api.FraudApi;
 import com.academy.paybridge.compliance.api.FraudContext;
 import com.academy.paybridge.compliance.api.FraudResult;
 import com.academy.paybridge.customer.api.CustomerApi;
+import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.config.AppProperties;
 import com.academy.paybridge.shared.exception.ApiException;
@@ -39,6 +40,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Orchestrates the two kinds of transfer.
+ *
+ * INTERNAL (PayBridge account to PayBridge account) is all or nothing: one transaction.
+ * EXTERNAL (payout to a bank through the gateway) cannot be one transaction, because the provider
+ * is someone else's computer. So: resolve, reserve (debit and save PENDING, committed), call the provider
+ * OUTSIDE any transaction, then settle to SUCCESSFUL or FAILED (with refund). See TransferSettlementService.
+ *
+ * This class itself is not @Transactional on purpose: it uses TransactionTemplate for the parts that must
+ * be atomic, so the PIN check and the provider call can sit outside them.
+ */
 @Service
 public class TransferService {
 
@@ -55,12 +67,13 @@ public class TransferService {
     private final TransactionTemplate tx;
     private final Clock clock;
     private final ZoneId zone;
+    private final LedgerApi ledger;
 
     public TransferService(TransferRepository transfers, AccountApi accounts, CustomerApi customers, FraudApi fraud,
                            ChargeCalculator chargeCalculator, TransferGateway gateway,
                            BankDirectory banks, TransferSettlementService settlement, AuditService audit,
                            ApplicationEventPublisher events, PlatformTransactionManager txManager, Clock clock,
-                           AppProperties appProps) {
+                           AppProperties appProps, LedgerApi ledger) {
         this.transfers = transfers;
         this.accounts = accounts;
         this.customers = customers;
@@ -74,8 +87,12 @@ public class TransferService {
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
         this.zone = ZoneId.of(appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
+        this.ledger = ledger;
     }
 
+    // =====================================================================================
+    // INTERNAL TRANSFER
+    // =====================================================================================
 
     public TransferResult transferInternal(Long customerId, String source, String destination, long amountKobo,
                                            String narration, String pin, String key) {
@@ -127,6 +144,8 @@ public class TransferService {
                 amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
                 clock.instant());
         transfers.save(t);
+        ledger.recordInternal(t.getReference(), source, destination, amountKobo,
+                charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo());
         audit.record(actor, "TRANSFER_COMPLETED", t.getReference(),
                 "internal " + Money.format(amountKobo) + " from " + Money.maskAccount(source)
                         + " to " + Money.maskAccount(destination));
@@ -137,7 +156,9 @@ public class TransferService {
         return new TransferResult(t, false);
     }
 
-
+    // =====================================================================================
+    // EXTERNAL TRANSFER (payout to a bank)
+    // =====================================================================================
 
     public TransferResult transferExternal(Long customerId, String source, String bankCode, String destinationAccount,
                                            long amountKobo, String narration, String pin, String key) {
@@ -159,6 +180,8 @@ public class TransferService {
         try {
             resolved = gateway.resolveAccount(destinationAccount, bankCode);
             recipientCode = gateway.createRecipient(resolved.accountName(), destinationAccount, bankCode);
+        } catch (com.academy.paybridge.transfer.gateway.LookupLimitReachedException e) {
+            throw ApiException.tooManyRequests("LOOKUP_LIMIT_REACHED", e.getMessage() + " Nothing was debited.");
         } catch (GatewayRejectedException e) {
             org.slf4j.LoggerFactory.getLogger(TransferService.class).warn(
                     "Paystack refused account check/recipient for bank {} (HTTP {}): {}",
@@ -211,6 +234,7 @@ public class TransferService {
         t.setBank(bank.code(), bank.name(), resolved.accountName(), recipientCode);
         t.setNote("Money reserved. Sending to the bank.");
         transfers.save(t);
+        ledger.recordReserve(t.getReference(), source, total);
         audit.record(actor, "TRANSFER_RESERVED", t.getReference(),
                 "payout " + Money.format(amountKobo) + " from " + Money.maskAccount(source) + " to "
                         + bank.name() + " " + Money.maskAccount(destinationAccount));
@@ -220,6 +244,10 @@ public class TransferService {
                 destinationAccount, bank.name(), amountKobo, charges.totalKobo(), total, flagged));
         return new TransferResult(t, false);
     }
+
+    // =====================================================================================
+    // READING, VERIFYING, QUOTING
+    // =====================================================================================
 
     /** Asks the provider about a pending payout. Only the owner of the source account may do this. */
     public Transfer verify(Long customerId, String reference) {
@@ -253,7 +281,14 @@ public class TransferService {
         return chargeCalculator.calculate(amountKobo, type);
     }
 
+    // =====================================================================================
+    // HELPERS
+    // =====================================================================================
 
+    /**
+     * Idempotency. Same key + same request = return the stored transfer. Same key + different request = refuse.
+     * The key belongs to the SOURCE account, so one customer can never replay another customer's transfer.
+     */
     private Optional<TransferResult> replayIfSeen(String source, String key, String hash) {
         Optional<Transfer> existing = transfers.findBySourceAccountNumberAndIdempotencyKey(source, key);
         if (existing.isEmpty()) {
@@ -266,7 +301,10 @@ public class TransferService {
         return Optional.of(new TransferResult(existing.get(), true));
     }
 
-
+    /**
+     * Runs the fraud rules. BLOCK refuses the transfer (the real reasons go to the audit log only).
+     * FLAG lets it through and returns true so the owner is warned.
+     */
     private boolean screen(Long customerId, String source, String destinationAccount, long amountKobo, String bankCode) {
         Instant now = clock.instant();
         Instant startOfDay = clock.instant().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant();
@@ -322,6 +360,7 @@ public class TransferService {
         }
     }
 
+    /** Our own reference: trf_ plus 32 hex characters (36 in total, within Paystack's 16 to 50 lowercase rule). */
     private static String newReference() {
         return "trf_" + UUID.randomUUID().toString().replace("-", "");
     }

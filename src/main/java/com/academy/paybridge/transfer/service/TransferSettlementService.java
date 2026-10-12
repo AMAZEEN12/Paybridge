@@ -1,6 +1,7 @@
 package com.academy.paybridge.transfer.service;
 
 import com.academy.paybridge.account.api.AccountApi;
+import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.Money;
@@ -45,10 +46,12 @@ public class TransferSettlementService {
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final LedgerApi ledger;
 
     public TransferSettlementService(TransferRepository transfers, AccountApi accounts, TransferGateway gateway,
                                      AuditService audit, ApplicationEventPublisher events,
-                                     PlatformTransactionManager txManager, Clock clock) {
+                                     PlatformTransactionManager txManager, Clock clock,
+                                     LedgerApi ledger) {
         this.transfers = transfers;
         this.accounts = accounts;
         this.gateway = gateway;
@@ -56,6 +59,7 @@ public class TransferSettlementService {
         this.events = events;
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
+        this.ledger = ledger;
     }
 
     /** Step 3 of an external transfer: ask the provider to pay. Runs with NO open transaction. */
@@ -144,11 +148,14 @@ public class TransferSettlementService {
                 if (t.getStampDutyKobo() > 0) {
                     accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, t.getStampDutyKobo());
                 }
+                ledger.recordPayoutSuccess(reference, t.getAmountKobo(), t.getFeeKobo(), t.getVatKobo(),
+                        t.getStampDutyKobo());
                 t.setStatus(TransferStatus.SUCCESSFUL);
                 t.setNote(null);
                 audit.record("paystack", "TRANSFER_SUCCESSFUL", reference, null);
             } else {
                 accounts.credit(t.getSourceAccountNumber(), t.getTotalDebitKobo());   // the refund, charges included
+                ledger.recordPayoutRefund(reference, t.getSourceAccountNumber(), t.getTotalDebitKobo());
                 t.setStatus(TransferStatus.FAILED);
                 t.setNote(reason == null ? "Payout failed" : reason);
                 audit.record("system", "TRANSFER_FAILED_REFUNDED", reference,

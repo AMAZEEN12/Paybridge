@@ -1,6 +1,7 @@
 package com.academy.paybridge.account.api;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /** The only door other modules may use to talk to the account module. */
@@ -25,4 +26,7 @@ public interface AccountApi {
     void credit(String accountNumber, long kobo);
 
     boolean isFrozen(String accountNumber);
+
+    /** Every account number with its balance in kobo. Read-only; used by the ledger reconciliation. */
+    Map<String, Long> balances();
 }

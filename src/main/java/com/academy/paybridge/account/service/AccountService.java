@@ -7,6 +7,7 @@ import com.academy.paybridge.account.api.AccountType;
 import com.academy.paybridge.account.api.AccountView;
 import com.academy.paybridge.account.domain.Account;
 import com.academy.paybridge.account.repository.AccountRepository;
+import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.Money;
@@ -17,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
 
@@ -29,12 +32,15 @@ public class AccountService implements AccountApi {
     private final AccountRepository accounts;
     private final AuditService audit;
     private final ApplicationEventPublisher events;
+    private final LedgerApi ledger;
     private final SecureRandom random = new SecureRandom();
 
-    public AccountService(AccountRepository accounts, AuditService audit, ApplicationEventPublisher events) {
+    public AccountService(AccountRepository accounts, AuditService audit, ApplicationEventPublisher events,
+                          LedgerApi ledger) {
         this.accounts = accounts;
         this.audit = audit;
         this.events = events;
+        this.ledger = ledger;
     }
 
     // ---------- used by the account controller ----------
@@ -77,6 +83,7 @@ public class AccountService implements AccountApi {
     public AccountView devFund(String accountNumber, Long customerId, long kobo) {
         getOwned(accountNumber, customerId);
         credit(accountNumber, kobo);
+        ledger.recordFunding(accountNumber, kobo);
         audit.record("customer:" + customerId, "DEV_FUNDING", null,
                 "account " + Money.maskAccount(accountNumber) + " +" + kobo + " kobo");
         return view(accounts.findByAccountNumber(accountNumber).orElseThrow());
@@ -148,6 +155,14 @@ public class AccountService implements AccountApi {
     public boolean isFrozen(String accountNumber) {
         return accounts.findByAccountNumber(accountNumber)
                 .map(a -> a.getStatus() == AccountStatus.FROZEN).orElse(false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Long> balances() {
+        Map<String, Long> result = new HashMap<>();
+        accounts.findAll().forEach(a -> result.put(a.getAccountNumber(), a.getBalanceKobo()));
+        return result;
     }
 
     // ---------- helpers ----------

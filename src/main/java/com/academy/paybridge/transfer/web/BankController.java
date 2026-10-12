@@ -5,6 +5,7 @@ import com.academy.paybridge.shared.config.CurrentUser;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.Money;
 import com.academy.paybridge.transfer.gateway.GatewayRejectedException;
+import com.academy.paybridge.transfer.gateway.LookupLimitReachedException;
 import com.academy.paybridge.transfer.gateway.GatewayUnavailableException;
 import com.academy.paybridge.transfer.gateway.ResolvedAccount;
 import com.academy.paybridge.transfer.gateway.TransferGateway;
@@ -69,6 +70,8 @@ public class BankController {
         try {
             ResolvedAccount resolved = gateway.resolveAccount(request.accountNumber(), request.bankCode());
             return new ResolveResponse(resolved.accountName());
+        } catch (LookupLimitReachedException e) {
+            throw ApiException.tooManyRequests("LOOKUP_LIMIT_REACHED", e.getMessage());
         } catch (GatewayRejectedException e) {
             // Without this line the real reason (bad key, IP block, rate limit, unknown account) is invisible.
             log.warn("Paystack refused name enquiry for bank {} (HTTP {}): {}",

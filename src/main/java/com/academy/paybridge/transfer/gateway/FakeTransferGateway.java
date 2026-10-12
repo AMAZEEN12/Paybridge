@@ -25,6 +25,12 @@ public class FakeTransferGateway implements TransferGateway {
 
     private final Map<String, Outcome> processed = new ConcurrentHashMap<>();
 
+    public FakeTransferGateway() {
+        org.slf4j.LoggerFactory.getLogger(FakeTransferGateway.class).warn(
+                "GATEWAY: FAKE gateway is active, so NOTHING is sent to Paystack. "
+                        + "To use Paystack, set SPRING_PROFILES_ACTIVE=paystack and PAYSTACK_SECRET_KEY, then restart.");
+    }
+
     @Override
     public List<Bank> listBanks() {
         return List.of(

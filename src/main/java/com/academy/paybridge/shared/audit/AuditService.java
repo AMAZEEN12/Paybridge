@@ -5,15 +5,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Writes the append-only audit diary.
- *
- * record(...)               joins the caller's transaction: if the business work rolls back, so does the row.
- * recordIndependently(...)  uses its own transaction: the row survives even if the caller rolls back.
- *                           Use it for refusals, blocks and failures, which are exactly the rows you need later.
- *
- * Never put passwords, PINs, tokens, secret keys or full account numbers into details.
- */
 @Service
 public class AuditService {
 
