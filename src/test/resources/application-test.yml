@@ -1,7 +1,7 @@
 # Used by the integration tests (profile "test"). They need a real Postgres database.
 spring:
   datasource:
-    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/paybridge_test}
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/paybridge_test1}
     username: ${TEST_DB_USER:postgres}
     password: ${TEST_DB_PASSWORD:${DB_PASSWORD:}}
 

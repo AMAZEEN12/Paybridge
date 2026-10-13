@@ -12,6 +12,9 @@ import java.util.List;
  * heldKobo     the sum of every PayBridge account balance (customers and charge accounts)
  *
  * The rule that must always hold:  heldKobo + inFlightKobo + paidOutKobo = fundedKobo
+ *
+ * The *Kobo totals are the Naira totals. problems covers every currency (a line for another currency starts with its
+ * code in brackets, for example "[USD]"), and currencies has the totals of each currency in its own minor units.
  */
 public record ReconciliationReport(
         Instant checkedAt,
@@ -22,5 +25,12 @@ public record ReconciliationReport(
         long paidOutKobo,
         long inFlightKobo,
         long heldKobo,
-        List<String> problems) {
+        List<String> problems,
+        List<CurrencyTotals> currencies) {
+
+    /** The report as it was before currencies: the Naira totals only. */
+    public ReconciliationReport(Instant checkedAt, boolean ok, long entries, long journals, long fundedKobo,
+                                long paidOutKobo, long inFlightKobo, long heldKobo, List<String> problems) {
+        this(checkedAt, ok, entries, journals, fundedKobo, paidOutKobo, inFlightKobo, heldKobo, problems, List.of());
+    }
 }

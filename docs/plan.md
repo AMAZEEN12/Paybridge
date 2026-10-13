@@ -156,6 +156,31 @@ reconciliation job comparing keys of different shapes; the payout reserve/refund
 
 **Done when:** acceptance criterion 8 passes at unit level and nothing user-visible changed.
 
+<!-- Paste under "## 5. Step 2" in docs/plan.md, and set the Progress table row for step 2 to "Code done, needs mvn test". -->
+
+**As built (departures from the text above).**
+- *Names:* the money type is `CurrencyAmount` (record: `long minor`, `CurrencyInfo`), with `CurrencyInfo` and `CurrencyRegistry`,
+  all in `shared/money`. The static `Money` is untouched and stays the Naira helper until step 7.
+- *Registry loader:* `shared/config/CurrencyConfig` builds the registry from the `currencies` table at start-up (D5 said the
+  loader would live in `account`; `shared` is simpler and needs no module). Exclusion list: `paybridge.currencies.excluded`
+  in `application.yml` (comma separated, env `PAYBRIDGE_CURRENCIES_EXCLUDED`).
+- *`Money.format` for non-NGN currencies:* not changed. `CurrencyAmount.format()` and `CurrencyRegistry.format()` do it.
+- *Migration:* `V10__currencies_countries.sql` (50 currencies from spec section 9, 82 countries). Symbols use Postgres
+  unicode escapes. The spec's prose says "five zero-decimal currencies" but its list marks eight (JPY, UGX, RWF, XOF, XAF,
+  CLP, KRW, VND); the list is what is seeded. The country list is a starting mapping and must be reviewed (R-CUR-4).
+- *Ledger:* `LedgerApi.recordJournal(key, reference, type, List<JournalLine>)` posts any mix of currencies and refuses a
+  journal in which any currency does not balance on its own, or a wallet key whose suffix differs from the line's currency.
+  The Naira methods are unchanged and now go through the same code.
+- *Reconciliation:* `ReconciliationRules.checkByCurrency` (new) runs the existing checks once per currency; `check` is
+  unchanged. The money-in rule becomes `held + in flight + paid out + FX pool/fee = funded` (the FX term is zero until
+  step 6). `ReconciliationReport` gains `currencies` (per-currency totals); the `*Kobo` fields stay the Naira totals;
+  problems for another currency start with `[USD]`. New repository queries group by currency.
+- *Trap for step 4:* `AccountApi.balances()` still returns NGN wallets only. Once other currencies have wallets it must
+  return every wallet, or reconciliation reports them as "unknown account".
+- *Tests added (no existing test edited):* `CurrencyAmountTest`, `CurrencyRegistryTest`, `LedgerJournalTest`,
+  `ReconciliationByCurrencyTest`, `MultiCurrencyLedgerTest`. The last one writes USD/EUR journals on `EXT:` accounts into
+  the test database; they reconcile cleanly and the ledger is append-only, so they stay there.
+
 ---
 
 ## 6. Step 3: Sign-up with country and the single account

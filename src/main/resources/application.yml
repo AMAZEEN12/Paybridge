@@ -69,6 +69,10 @@ paybridge:
     # Paystack gives a TEST account only a few live name lookups a day. We count them and remember names we have found.
     resolve-daily-limit: ${PAYSTACK_RESOLVE_DAILY_LIMIT:3}      # 0 = no counter (use with a live key)
     resolve-cache-hours: ${PAYSTACK_RESOLVE_CACHE_HOURS:24}
+  currencies:
+    # Sanctioned currencies, comma separated. They are unusable even if they are in the currencies table.
+    # To be verified against current OFAC, UN and EU lists before release (spec R-CUR-4).
+    excluded: ${PAYBRIDGE_CURRENCIES_EXCLUDED:IRR,KPW,SYP,CUP}
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000
