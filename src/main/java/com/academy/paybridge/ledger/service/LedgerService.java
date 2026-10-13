@@ -20,6 +20,8 @@ import java.util.UUID;
  */
 @Service
 public class LedgerService implements LedgerApi {
+    /** Step 1 is NGN only; the currency-aware journal methods arrive in step 2. */
+    private static final String NGN = "NGN";
 
     private record Line(String account, Direction direction, long kobo) {
     }
@@ -109,7 +111,9 @@ public class LedgerService implements LedgerApi {
         var now = clock.instant();
         List<LedgerEntry> rows = new ArrayList<>();
         for (Line l : lines) {
-            rows.add(new LedgerEntry(journalKey, reference, l.account(), l.direction(), l.kobo(), type, now));
+            // Real accounts become wallet keys ("2000000001:NGN"); the EXT: accounts keep their names.
+            rows.add(new LedgerEntry(journalKey, reference, LedgerApi.walletKey(l.account(), NGN),
+                    l.direction(), l.kobo(), NGN, type, now));
         }
         entries.saveAll(rows);
     }
