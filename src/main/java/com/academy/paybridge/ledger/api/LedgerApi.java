@@ -35,6 +35,7 @@ public interface LedgerApi {
     void recordPayoutRefund(String reference, String source, long totalDebitKobo);
 
     /**
+<<<<<<< HEAD
      * Posts one journal that may involve several currencies (for example a conversion).
      * Every currency in the journal must balance independently: for each currency,
      * debits must equal credits.
@@ -52,17 +53,36 @@ public interface LedgerApi {
      * The ledger key of one wallet: "<account_number>:<currency>",
      * for example "2000000001:NGN".
      * EXT: accounts are not wallets and keep their names.
+=======
+     * The ledger key of one wallet: "<account_number>:<currency>", for example "2000000001:NGN".
+     * The EXT: accounts are not wallets and keep their names.
+>>>>>>> origin/main
      */
     static String walletKey(String accountNumber, String currency) {
         return accountNumber.startsWith("EXT:") ? accountNumber : accountNumber + ":" + currency;
     }
 
+<<<<<<< HEAD
     /**
      * Drops the currency suffix from a wallet key.
      * Plain account numbers and EXT: names come back unchanged.
      */
+=======
+    /** The reverse, for messages: drops the ":NGN" suffix. Plain account numbers and EXT: names come back unchanged. */
+>>>>>>> origin/main
     static String accountNumberOf(String key) {
         int colon = key.lastIndexOf(':');
         return (key.startsWith("EXT:") || colon < 0) ? key : key.substring(0, colon);
     }
+<<<<<<< HEAD
 }
+=======
+
+    /**
+     * The ledger key of one wallet: "<account_number>:<currency>", for example "2000000001:NGN".
+     * The EXT: accounts are not wallets and keep their names.
+     */
+
+    /** The reverse, for messages: drops the ":NGN" suffix. Plain account numbers and EXT: names come back unchanged. */
+}
+>>>>>>> origin/main

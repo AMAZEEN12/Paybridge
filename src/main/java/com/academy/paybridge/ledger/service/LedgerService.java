@@ -25,6 +25,8 @@ import java.util.regex.Pattern;
  */
 @Service
 public class LedgerService implements LedgerApi {
+    /** Step 1 is NGN only; the currency-aware journal methods arrive in step 2. */
+    private static final String NGN = "NGN";
 
     /** The older methods below (funding, transfers, payouts) are Naira only; recordJournal handles any currency. */
     private static final String NGN = "NGN";
@@ -160,6 +162,7 @@ public class LedgerService implements LedgerApi {
 
         var now = clock.instant();
         List<LedgerEntry> rows = new ArrayList<>();
+<<<<<<< HEAD
 
         for (JournalLine l : lines) {
             rows.add(new LedgerEntry(
@@ -171,6 +174,12 @@ public class LedgerService implements LedgerApi {
                     l.currency(),
                     type,
                     now));
+=======
+        for (Line l : lines) {
+            // Real accounts become wallet keys ("2000000001:NGN"); the EXT: accounts keep their names.
+            rows.add(new LedgerEntry(journalKey, reference, LedgerApi.walletKey(l.account(), NGN),
+                    l.direction(), l.kobo(), NGN, type, now));
+>>>>>>> origin/main
         }
 
         entries.saveAll(rows);
