@@ -12,6 +12,7 @@ import com.academy.paybridge.account.repository.WalletRepository;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
+import com.academy.paybridge.shared.money.CurrencyRegistry;
 import com.academy.paybridge.shared.money.Money;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -29,38 +30,59 @@ import java.util.TreeSet;
 @Service
 public class AccountService implements AccountApi {
 
-    private static final int MAX_ACCOUNTS_PER_CUSTOMER = 5;
+    /** Every account also gets these wallets (R-WAL-2), unless one of them is the home currency. */
+    private static final List<String> STARTER_CURRENCIES = List.of("USD", "EUR", "GBP");
 
     private final AccountRepository accounts;
     private final WalletRepository wallets;
     private final AuditService audit;
     private final ApplicationEventPublisher events;
     private final LedgerApi ledger;
+    private final CurrencyRegistry currencies;
     private final SecureRandom random = new SecureRandom();
 
     public AccountService(AccountRepository accounts, WalletRepository wallets, AuditService audit,
-                          ApplicationEventPublisher events, LedgerApi ledger) {
+                          ApplicationEventPublisher events, LedgerApi ledger, CurrencyRegistry currencies) {
         this.accounts = accounts;
         this.wallets = wallets;
         this.audit = audit;
         this.events = events;
         this.ledger = ledger;
+        this.currencies = currencies;
+    }
+
+    // ---------- sign-up ----------
+
+    @Override
+    @Transactional
+    public AccountView openHomeAccount(Long customerId, String homeCurrency) {
+        if (!currencies.isUsable(homeCurrency)) {
+            throw ApiException.unprocessable("CURRENCY_NOT_SUPPORTED", "That currency is not supported.");
+        }
+        if (accounts.countByCustomerIdAndType(customerId, AccountType.CUSTOMER) > 0) {
+            throw ApiException.conflict("ACCOUNT_EXISTS", "You already have an account.");
+        }
+        String number = newAccountNumber();
+        Account account = new Account(number, customerId);
+        account.addWallet(new Wallet(account, homeCurrency, true));
+        for (String currency : STARTER_CURRENCIES) {
+            if (!currency.equals(homeCurrency)) {
+                account.addWallet(new Wallet(account, currency, false));
+            }
+        }
+        Account saved = accounts.saveAndFlush(account);
+        audit.record("customer:" + customerId, "ACCOUNT_OPENED", null,
+                "account " + Money.maskAccount(number) + ", home " + homeCurrency);
+        return view(saved);
     }
 
     // ---------- used by the account controller ----------
 
-    @Transactional
-    public AccountView open(Long customerId) {
-        if (accounts.countByCustomerIdAndType(customerId, AccountType.CUSTOMER) >= MAX_ACCOUNTS_PER_CUSTOMER) {
-            throw ApiException.unprocessable("ACCOUNT_LIMIT_REACHED",
-                    "You can open at most " + MAX_ACCOUNTS_PER_CUSTOMER + " accounts.");
-        }
-        String number = newAccountNumber();
-        Account account = new Account(number, customerId);
-        account.addWallet(new Wallet(account, Wallet.NGN, true));     // the NGN home wallet
-        Account saved = accounts.saveAndFlush(account);
-        audit.record("customer:" + customerId, "ACCOUNT_OPENED", null, "account " + Money.maskAccount(number));
-        return view(saved);
+    /** The customer's account. Every customer has exactly one, created at sign-up. */
+    @Transactional(readOnly = true)
+    public AccountView existingFor(Long customerId) {
+        return listFor(customerId).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
     }
 
     @Transactional(readOnly = true)
@@ -164,12 +186,13 @@ public class AccountService implements AccountApi {
                 .map(a -> a.getStatus() == AccountStatus.FROZEN).orElse(false);
     }
 
+    /** Every wallet, keyed "<account_number>:<currency>", so reconciliation sees USD, EUR and GBP wallets too. */
     @Override
     @Transactional(readOnly = true)
     public Map<String, Long> balances() {
         Map<String, Long> result = new HashMap<>();
-        for (Object[] row : wallets.ngnBalances()) {
-            result.put(LedgerApi.walletKey((String) row[0], Wallet.NGN), ((Number) row[1]).longValue());
+        for (Object[] row : wallets.allBalances()) {
+            result.put(LedgerApi.walletKey((String) row[0], (String) row[1]), ((Number) row[2]).longValue());
         }
         return result;
     }

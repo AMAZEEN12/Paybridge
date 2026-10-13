@@ -73,6 +73,12 @@ paybridge:
     # Sanctioned currencies, comma separated. They are unusable even if they are in the currencies table.
     # To be verified against current OFAC, UN and EU lists before release (spec R-CUR-4).
     excluded: ${PAYBRIDGE_CURRENCIES_EXCLUDED:IRR,KPW,SYP,CUP}
+  geo:
+    base-url: https://free.freeipapi.com/api/v1/json
+    timeout-ms: 3000
+    client-ip-header: ${PAYBRIDGE_GEO_CLIENT_IP_HEADER:True-Client-IP}
+    allow-override: ${PAYBRIDGE_GEO_ALLOW_OVERRIDE:false}        # never set this on Render
+    override-country: ${PAYBRIDGE_GEO_OVERRIDE_COUNTRY:}        # tests and local development only
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000

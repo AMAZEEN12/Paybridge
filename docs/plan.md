@@ -9,7 +9,7 @@ Implements: `spec.md` (from `001-multi-currency-wallets.md`)
 |------|------|--------|
 | 0 | Baseline and guardrails | Build green. Hooks self-test not confirmed. |
 | 1 | Wallets, NGN only | Code done, all four commits green (V8 reset + ledger columns; V9 wallets + account module; ledger wallet keys). Left: hand check on the web page, review, deploy. |
-| 2 | Currencies and per-currency ledger | Not started |
+| 2 | Currencies and per-currency ledger | Built (branch step-2-currency-fix). V10 country and currency lists still to verify before release.  |
 | 3 | Sign-up with country and the single account | Not started |
 | 4 | Swap, park and receive-only wallets | Not started |
 | 5 | Rates (parallel track) | Not started |
@@ -156,7 +156,6 @@ reconciliation job comparing keys of different shapes; the payout reserve/refund
 
 **Done when:** acceptance criterion 8 passes at unit level and nothing user-visible changed.
 
-<!-- Paste under "## 5. Step 2" in docs/plan.md, and set the Progress table row for step 2 to "Code done, needs mvn test". -->
 
 **As built (departures from the text above).**
 - *Names:* the money type is `CurrencyAmount` (record: `long minor`, `CurrencyInfo`), with `CurrencyInfo` and `CurrencyRegistry`,
@@ -203,6 +202,30 @@ reconciliation job comparing keys of different shapes; the payout reserve/refund
 
 **Done when:** the existing flow tests are updated for sign-up-creates-account and pass.
 
+
+**As built (departures from the text above).**
+- *Geo-IP provider (open item 1, resolved):* freeipapi.com free server, `GET https://free.freeipapi.com/api/v1/json/{ip}`,
+  no key, 10 requests per 10 seconds and 60 per minute per server IP. Behind `GeoLocator`; any failure refuses the
+  sign-up with 503 `COUNTRY_UNDETECTED`. The IP is never logged. It is sent to a third party, so say so in the privacy text.
+- *Client IP behind Render:* read from the `True-Client-IP` header (`paybridge.geo.client-ip-header`). Render appends
+  to `X-Forwarded-For` without stripping client-supplied values, so its first entry can be forged and is NOT used. If the
+  header is configured and missing, the peer address is not used either. Must be verified on the live app (see below).
+- *Override (R-CTY-4):* this app has no production profile. `paybridge.geo.override-country` only works when
+  `paybridge.geo.allow-override=true`, and the app refuses to start if an override is set without it. Render never sets it.
+- *No `WebHardeningFilter` change:* the controller reads the header.
+- *Module wiring:* `customer.service.RegistrationService` detects and checks the country (no transaction open), then
+  `AuthService.register` creates the customer and calls `AccountApi.openHomeAccount` in one transaction. `CountryRegistry`
+  lives in `shared/money` next to `CurrencyRegistry`.
+- *Open-account endpoint:* `POST /api/v1/accounts` now returns the existing account (200). The 5-account rule and the
+  web button are removed. The one-account rule is enforced in the service, not by a unique index, so a database that
+  already holds multi-account test users still starts.
+- *V11:* adds `customers.country`; customers from before this migration are set to NG.
+- *Step 4 trap closed here:* `AccountApi.balances()` returns every wallet keyed `<account_number>:<currency>`.
+- *Cleanup:* `LedgerEntry.getAmountKobo()` alias removed.
+- *Known gap until step 4:* `debit`, `credit` and `lockInOrder` only handle the NGN wallet, so a customer with a
+  non-NGN home currency cannot yet send or receive local transfers. The page shows ₦0.00 for them.
+- *Tests:* `ClientCountryResolverTest`, `CountryRegistryTest`, `FreeIpApiGeoLocatorTest`, `SignUpCountriesTest`;
+  `AccountsWalletsTest` rewritten; one status assertion in `PayBridgeFlowTest.newUser` changed from 201 to 200.
 ---
 
 ## 7. Step 4: Swap, park and receive-only wallets

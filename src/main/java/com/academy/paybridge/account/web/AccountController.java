@@ -8,7 +8,6 @@ import com.academy.paybridge.shared.config.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -35,10 +33,10 @@ public class AccountController {
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Open a new naira account with a zero balance")
+    @Operation(summary = "Get my account",
+            description = "Every customer has one account, created at sign-up. This returns it (it never creates another).")
     public AccountResponse open(@AuthenticationPrincipal Jwt jwt) {
-        return AccountResponse.from(accounts.open(CurrentUser.id(jwt)));
+        return AccountResponse.from(accounts.existingFor(CurrentUser.id(jwt)));
     }
 
     @GetMapping
