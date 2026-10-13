@@ -15,12 +15,12 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     /** Rows: [journal_key, total debits, total credits] for journals whose two sides differ. At most 50. */
     @Query(value = """
             select journal_key,
-                   coalesce(sum(case when direction = 'DEBIT' then amount_kobo else 0 end), 0)::bigint,
-                   coalesce(sum(case when direction = 'CREDIT' then amount_kobo else 0 end), 0)::bigint
+                   coalesce(sum(case when direction = 'DEBIT' then amount_minor else 0 end), 0)::bigint,
+                   coalesce(sum(case when direction = 'CREDIT' then amount_minor else 0 end), 0)::bigint
             from ledger_entries
             group by journal_key
-            having sum(case when direction = 'DEBIT' then amount_kobo else 0 end)
-                <> sum(case when direction = 'CREDIT' then amount_kobo else 0 end)
+            having sum(case when direction = 'DEBIT' then amount_minor else 0 end)
+                <> sum(case when direction = 'CREDIT' then amount_minor else 0 end)
             order by journal_key
             limit 50
             """, nativeQuery = true)
@@ -29,11 +29,37 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     /** Rows: [account_number, credits minus debits] for every account that has ledger lines. */
     @Query(value = """
             select account_number,
-                   coalesce(sum(case when direction = 'CREDIT' then amount_kobo else -amount_kobo end), 0)::bigint
+                   coalesce(sum(case when direction = 'CREDIT' then amount_minor else -amount_minor end), 0)::bigint
             from ledger_entries
             group by account_number
             """, nativeQuery = true)
     List<Object[]> netByAccount();
+
+    /**
+     * Rows: [journal_key, currency, total debits, total credits] for every journal AND currency whose two sides
+     * differ (R-LED-3: each currency balances on its own). At most 50.
+     */
+    @Query(value = """
+            select journal_key, currency,
+                   coalesce(sum(case when direction = 'DEBIT' then amount_minor else 0 end), 0)::bigint,
+                   coalesce(sum(case when direction = 'CREDIT' then amount_minor else 0 end), 0)::bigint
+            from ledger_entries
+            group by journal_key, currency
+            having sum(case when direction = 'DEBIT' then amount_minor else 0 end)
+                <> sum(case when direction = 'CREDIT' then amount_minor else 0 end)
+            order by journal_key, currency
+            limit 50
+            """, nativeQuery = true)
+    List<Object[]> findUnbalancedJournalsByCurrency();
+
+    /** Rows: [account_number, currency, credits minus debits] for every ledger key and currency. */
+    @Query(value = """
+            select account_number, currency,
+                   coalesce(sum(case when direction = 'CREDIT' then amount_minor else -amount_minor end), 0)::bigint
+            from ledger_entries
+            group by account_number, currency
+            """, nativeQuery = true)
+    List<Object[]> netByAccountAndCurrency();
 
     @Query(value = "select count(distinct journal_key) from ledger_entries", nativeQuery = true)
     long countJournals();

@@ -6,7 +6,9 @@ import com.academy.paybridge.account.api.AccountStatusChangedEvent;
 import com.academy.paybridge.account.api.AccountType;
 import com.academy.paybridge.account.api.AccountView;
 import com.academy.paybridge.account.domain.Account;
+import com.academy.paybridge.account.domain.Wallet;
 import com.academy.paybridge.account.repository.AccountRepository;
+import com.academy.paybridge.account.repository.WalletRepository;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
@@ -30,14 +32,16 @@ public class AccountService implements AccountApi {
     private static final int MAX_ACCOUNTS_PER_CUSTOMER = 5;
 
     private final AccountRepository accounts;
+    private final WalletRepository wallets;
     private final AuditService audit;
     private final ApplicationEventPublisher events;
     private final LedgerApi ledger;
     private final SecureRandom random = new SecureRandom();
 
-    public AccountService(AccountRepository accounts, AuditService audit, ApplicationEventPublisher events,
-                          LedgerApi ledger) {
+    public AccountService(AccountRepository accounts, WalletRepository wallets, AuditService audit,
+                          ApplicationEventPublisher events, LedgerApi ledger) {
         this.accounts = accounts;
+        this.wallets = wallets;
         this.audit = audit;
         this.events = events;
         this.ledger = ledger;
@@ -52,7 +56,9 @@ public class AccountService implements AccountApi {
                     "You can open at most " + MAX_ACCOUNTS_PER_CUSTOMER + " accounts.");
         }
         String number = newAccountNumber();
-        Account saved = accounts.saveAndFlush(new Account(number, customerId));
+        Account account = new Account(number, customerId);
+        account.addWallet(new Wallet(account, Wallet.NGN, true));     // the NGN home wallet
+        Account saved = accounts.saveAndFlush(account);
         audit.record("customer:" + customerId, "ACCOUNT_OPENED", null, "account " + Money.maskAccount(number));
         return view(saved);
     }
@@ -117,11 +123,12 @@ public class AccountService implements AccountApi {
                 .map(Account::getCustomerId);
     }
 
+    /** Locks the NGN wallet row of each account, in sorted account-number order, no duplicates. */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void lockInOrder(Collection<String> accountNumbers) {
-        for (String number : new TreeSet<>(accountNumbers)) {          // sorted, no duplicates
-            accounts.findForUpdate(number)
+        for (String number : new TreeSet<>(accountNumbers)) {
+            wallets.findNgnForUpdate(number)
                     .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
         }
     }
@@ -129,25 +136,25 @@ public class AccountService implements AccountApi {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void debit(String accountNumber, long kobo) {
-        Account a = accounts.findForUpdate(accountNumber)
+        Wallet w = wallets.findNgnForUpdate(accountNumber)
                 .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
-        if (a.getStatus() == AccountStatus.FROZEN) {
+        if (w.getAccount().getStatus() == AccountStatus.FROZEN) {
             throw ApiException.unprocessable("ACCOUNT_FROZEN", "This account is frozen. Unfreeze it to send money.");
         }
-        if (a.getBalanceKobo() < kobo) {
+        if (w.getBalanceMinor() < kobo) {
             throw ApiException.unprocessable("INSUFFICIENT_FUNDS", "You do not have enough money, including charges.");
         }
-        a.setBalanceKobo(a.getBalanceKobo() - kobo);
-        accounts.save(a);
+        w.setBalanceMinor(w.getBalanceMinor() - kobo);
+        wallets.save(w);
     }
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void credit(String accountNumber, long kobo) {
-        Account a = accounts.findForUpdate(accountNumber)
+        Wallet w = wallets.findNgnForUpdate(accountNumber)
                 .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
-        a.setBalanceKobo(Math.addExact(a.getBalanceKobo(), kobo));
-        accounts.save(a);
+        w.setBalanceMinor(Math.addExact(w.getBalanceMinor(), kobo));
+        wallets.save(w);
     }
 
     @Override
@@ -161,7 +168,9 @@ public class AccountService implements AccountApi {
     @Transactional(readOnly = true)
     public Map<String, Long> balances() {
         Map<String, Long> result = new HashMap<>();
-        accounts.findAll().forEach(a -> result.put(a.getAccountNumber(), a.getBalanceKobo()));
+        for (Object[] row : wallets.ngnBalances()) {
+            result.put(LedgerApi.walletKey((String) row[0], Wallet.NGN), ((Number) row[1]).longValue());
+        }
         return result;
     }
 

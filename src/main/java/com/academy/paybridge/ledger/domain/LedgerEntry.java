@@ -11,7 +11,6 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
-/** One line of a journal. Append-only: the database refuses updates and deletes. */
 @Entity
 @Table(name = "ledger_entries")
 public class LedgerEntry {
@@ -33,8 +32,11 @@ public class LedgerEntry {
     @Column(nullable = false, updatable = false)
     private Direction direction;
 
-    @Column(name = "amount_kobo", nullable = false, updatable = false)
-    private long amountKobo;
+    @Column(name = "amount_minor", nullable = false, updatable = false)
+    private long amountMinor;
+
+    @Column(nullable = false, updatable = false, length = 3)
+    private String currency;
 
     @Column(name = "entry_type", nullable = false, updatable = false)
     private String entryType;
@@ -45,23 +47,67 @@ public class LedgerEntry {
     protected LedgerEntry() {
     }
 
-    public LedgerEntry(String journalKey, String reference, String accountNumber, Direction direction,
-                       long amountKobo, String entryType, Instant now) {
+    public LedgerEntry(
+            String journalKey,
+            String reference,
+            String accountNumber,
+            Direction direction,
+            long amountMinor,
+            String currency,
+            String entryType,
+            Instant now
+    ) {
         this.journalKey = journalKey;
         this.reference = reference;
         this.accountNumber = accountNumber;
         this.direction = direction;
-        this.amountKobo = amountKobo;
+        this.amountMinor = amountMinor;
+        this.currency = currency;
         this.entryType = entryType;
         this.createdAt = now;
     }
 
-    public Long getId() { return id; }
-    public String getJournalKey() { return journalKey; }
-    public String getReference() { return reference; }
-    public String getAccountNumber() { return accountNumber; }
-    public Direction getDirection() { return direction; }
-    public long getAmountKobo() { return amountKobo; }
-    public String getEntryType() { return entryType; }
-    public Instant getCreatedAt() { return createdAt; }
+    public Long getId() {
+        return id;
+    }
+
+    public String getJournalKey() {
+        return journalKey;
+    }
+
+    public String getReference() {
+        return reference;
+    }
+
+    public String getAccountNumber() {
+        return accountNumber;
+    }
+
+    public Direction getDirection() {
+        return direction;
+    }
+
+    public long getAmountMinor() {
+        return amountMinor;
+    }
+
+    /**
+     * Backward-compatible alias for older NGN code.
+     * The stored value is expressed in the currency's minor units.
+     */
+    public long getAmountKobo() {
+        return amountMinor;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public String getEntryType() {
+        return entryType;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }
