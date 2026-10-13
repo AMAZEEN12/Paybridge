@@ -47,7 +47,6 @@ public class LedgerEntry {
     protected LedgerEntry() {
     }
 
-<<<<<<< HEAD
     public LedgerEntry(
             String journalKey,
             String reference,
@@ -58,10 +57,6 @@ public class LedgerEntry {
             String entryType,
             Instant now
     ) {
-=======
-    public LedgerEntry(String journalKey, String reference, String accountNumber, Direction direction,
-                       long amountMinor, String currency, String entryType, Instant now) {
->>>>>>> origin/main
         this.journalKey = journalKey;
         this.reference = reference;
         this.accountNumber = accountNumber;
@@ -72,7 +67,6 @@ public class LedgerEntry {
         this.createdAt = now;
     }
 
-<<<<<<< HEAD
     public Long getId() {
         return id;
     }
@@ -117,15 +111,3 @@ public class LedgerEntry {
         return createdAt;
     }
 }
-=======
-    public Long getId() { return id; }
-    public String getJournalKey() { return journalKey; }
-    public String getReference() { return reference; }
-    public String getAccountNumber() { return accountNumber; }
-    public Direction getDirection() { return direction; }
-    public long getAmountMinor() { return amountMinor; }
-    public String getCurrency() { return currency; }
-    public String getEntryType() { return entryType; }
-    public Instant getCreatedAt() { return createdAt; }
-}
->>>>>>> origin/main

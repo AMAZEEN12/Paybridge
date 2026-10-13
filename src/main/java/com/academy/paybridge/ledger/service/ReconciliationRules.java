@@ -22,12 +22,8 @@ import java.util.function.LongFunction;
  *  1. every journal has equal debits and credits
  *  2. every PayBridge wallet's balance equals its ledger total (credits minus debits)
  *  3. the ledger has no lines for a wallet that does not exist
-<<<<<<< HEAD
  *  4. money in = money held + money in flight + money paid out,
  *     accounting for FX-related ledger-only accounts where applicable
-=======
- *  4. money in = money held + money in flight + money paid out
->>>>>>> origin/main
  */
 public final class ReconciliationRules {
 
@@ -35,17 +31,8 @@ public final class ReconciliationRules {
     }
 
     /**
-<<<<<<< HEAD
      * The keys of ledgerNet and balances only have to match each other.
      * Wallet keys such as "2000000001:NGN" are supported, as are legacy plain account numbers.
-=======
-     * The keys of ledgerNet and balances only have to match each other. In step 1 they are wallet keys such as
-     * "2000000001:NGN"; the older plain account numbers work too.
-     *
-     * @param unbalancedJournals rows of [journal key, debits, credits] for journals that do not balance
-     * @param ledgerNet          wallet key (or EXT: account) to credits minus debits, from the ledger
-     * @param balances           wallet key to balance, from the wallets table
->>>>>>> origin/main
      */
     public static ReconciliationReport check(Instant now, long entries, long journals,
                                              List<Object[]> unbalancedJournals,
@@ -181,20 +168,9 @@ public final class ReconciliationRules {
             held += balance;
 
             if (balance != fromLedger) {
-<<<<<<< HEAD
                 problems.add("Account " + Money.maskAccount(LedgerApi.accountNumberOf(account))
                         + ": balance " + fmt.apply(balance)
                         + " but ledger says " + fmt.apply(fromLedger));
-=======
-                problems.add("Account " + Money.maskAccount(LedgerApi.accountNumberOf(account)) + ": balance "
-                        + Money.format(balance) + " but ledger says " + Money.format(fromLedger));
-            }
-        }
-        for (String account : new TreeSet<>(ledgerNet.keySet())) {
-            if (!account.startsWith("EXT:") && !balances.containsKey(account)) {
-                problems.add("Ledger has lines for an unknown account "
-                        + Money.maskAccount(LedgerApi.accountNumberOf(account)));
->>>>>>> origin/main
             }
         }
 
