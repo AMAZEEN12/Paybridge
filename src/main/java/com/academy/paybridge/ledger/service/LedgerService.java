@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
  */
 @Service
 public class LedgerService implements LedgerApi {
+
     /** The older methods below (funding, transfers, payouts) are Naira only; recordJournal handles any currency. */
     private static final String NGN = "NGN";
     private static final Pattern CURRENCY_CODE = Pattern.compile("[A-Z]{3}");
@@ -70,9 +71,11 @@ public class LedgerService implements LedgerApi {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void recordPayoutSuccess(String reference, long amountKobo, long feeKobo, long vatKobo, long stampDutyKobo) {
+    public void recordPayoutSuccess(String reference, long amountKobo, long feeKobo, long vatKobo,
+                                    long stampDutyKobo) {
         List<Line> lines = new ArrayList<>();
-        lines.add(new Line(EXT_IN_FLIGHT, Direction.DEBIT, amountKobo + feeKobo + vatKobo + stampDutyKobo));
+        lines.add(new Line(EXT_IN_FLIGHT, Direction.DEBIT,
+                amountKobo + feeKobo + vatKobo + stampDutyKobo));
         lines.add(new Line(EXT_PAID_OUT, Direction.CREDIT, amountKobo));
         addCharges(lines, feeKobo, vatKobo, stampDutyKobo);
         post(reference + ":PAYOUT", reference, "PAYOUT", lines);
@@ -104,50 +107,60 @@ public class LedgerService implements LedgerApi {
         postJournal(journalKey, reference, entryType, lines);
     }
 
-    /** The Naira-only methods: real accounts become wallet keys ("2000000001:NGN"); EXT: accounts keep their names. */
+    /** The Naira-only methods convert real accounts to NGN wallet keys; EXT: accounts keep their names. */
     private void post(String journalKey, String reference, String type, List<Line> lines) {
         List<JournalLine> converted = new ArrayList<>();
         for (Line l : lines) {
-            converted.add(new JournalLine(LedgerApi.walletKey(l.account(), NGN),
+            converted.add(new JournalLine(
+                    LedgerApi.walletKey(l.account(), NGN),
                     l.direction() == Direction.DEBIT ? JournalLine.Side.DEBIT : JournalLine.Side.CREDIT,
-                    NGN, l.kobo()));
+                    NGN,
+                    l.kobo()));
         }
         postJournal(journalKey, reference, type, converted);
     }
 
     /**
-     * Refuses to save a journal in which any currency's two sides differ. This is the double-entry rule itself,
-     * applied once per currency, so a USD line can never be balanced by a EUR line.
+     * Refuses to save a journal in which any currency's two sides differ.
+     * A USD line can never be balanced by a EUR line.
      */
     private void postJournal(String journalKey, String reference, String type, List<JournalLine> lines) {
         if (lines == null || lines.isEmpty()) {
             throw new IllegalStateException("A journal needs at least one line: " + journalKey);
         }
-        Map<String, long[]> totals = new TreeMap<>();                 // currency -> [debits, credits]
+
+        Map<String, long[]> totals = new TreeMap<>(); // currency -> [debits, credits]
+
         for (JournalLine l : lines) {
             if (l.amountMinor() <= 0) {
                 throw new IllegalStateException("Ledger line must be positive: " + journalKey);
             }
+
             if (l.currency() == null || !CURRENCY_CODE.matcher(l.currency()).matches()) {
                 throw new IllegalStateException("Ledger line has no valid currency: " + journalKey);
             }
+
             Matcher suffix = l.account() == null ? null : KEY_SUFFIX.matcher(l.account());
             if (suffix != null && suffix.find() && !suffix.group(1).equals(l.currency())) {
                 throw new IllegalStateException("Ledger line " + l.account() + " is in " + l.currency()
                         + " but its key says " + suffix.group(1) + ": " + journalKey);
             }
+
             long[] t = totals.computeIfAbsent(l.currency(), c -> new long[2]);
             int side = l.side() == JournalLine.Side.DEBIT ? 0 : 1;
             t[side] = Math.addExact(t[side], l.amountMinor());
         }
+
         for (Map.Entry<String, long[]> e : totals.entrySet()) {
             if (e.getValue()[0] != e.getValue()[1]) {
                 throw new IllegalStateException("Unbalanced journal " + journalKey + " in " + e.getKey()
                         + ": debits " + e.getValue()[0] + " credits " + e.getValue()[1]);
             }
         }
+
         var now = clock.instant();
         List<LedgerEntry> rows = new ArrayList<>();
+
         for (JournalLine l : lines) {
             rows.add(new LedgerEntry(
                     journalKey,
@@ -157,9 +170,9 @@ public class LedgerService implements LedgerApi {
                     l.amountMinor(),
                     l.currency(),
                     type,
-                    now
-            ));
+                    now));
         }
+
         entries.saveAll(rows);
     }
 }

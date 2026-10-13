@@ -1,5 +1,7 @@
 package com.academy.paybridge.ledger.api;
 
+import com.academy.paybridge.ledger.api.JournalLine;
+
 import java.util.List;
 
 /**
@@ -33,27 +35,32 @@ public interface LedgerApi {
     void recordPayoutRefund(String reference, String source, long totalDebitKobo);
 
     /**
-     * Posts one journal that may involve several currencies (for example a conversion, plan step 6). Every currency
-     * in the journal must balance ON ITS OWN: for each currency, debits equal credits (R-LED-3).
+     * Posts one journal that may involve several currencies (for example a conversion).
+     * Every currency in the journal must balance independently: for each currency,
+     * debits must equal credits.
      *
-     * A wallet line's account is {@link #walletKey}; its currency must match the key's suffix. The same journal key
-     * can be posted only once (the database refuses a repeat).
+     * A wallet line's account is a wallet key created by {@link #walletKey};
+     * its currency must match the key's suffix. The same journal key can be posted only once.
      *
      * @param entryType a short label such as "CONVERSION" (at most 20 characters)
-     * @throws IllegalStateException if a line is not positive, a currency is malformed, a key and its currency
-     *                               disagree, or any currency does not balance. Nothing is saved in that case.
+     * @throws IllegalStateException if a line is not positive, a currency is malformed,
+     *                               a key and its currency disagree, or any currency does not balance.
      */
     void recordJournal(String journalKey, String reference, String entryType, List<JournalLine> lines);
 
     /**
-     * The ledger key of one wallet: "<account_number>:<currency>", for example "2000000001:NGN".
-     * The EXT: accounts are not wallets and keep their names.
+     * The ledger key of one wallet: "<account_number>:<currency>",
+     * for example "2000000001:NGN".
+     * EXT: accounts are not wallets and keep their names.
      */
     static String walletKey(String accountNumber, String currency) {
         return accountNumber.startsWith("EXT:") ? accountNumber : accountNumber + ":" + currency;
     }
 
-    /** The reverse, for messages: drops the ":NGN" suffix. Plain account numbers and EXT: names come back unchanged. */
+    /**
+     * Drops the currency suffix from a wallet key.
+     * Plain account numbers and EXT: names come back unchanged.
+     */
     static String accountNumberOf(String key) {
         int colon = key.lastIndexOf(':');
         return (key.startsWith("EXT:") || colon < 0) ? key : key.substring(0, colon);
