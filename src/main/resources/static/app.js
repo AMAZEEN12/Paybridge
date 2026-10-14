@@ -8,6 +8,7 @@
     var token = null;
     var me = null;
     var accounts = [];
+    var wallets = [];
     var banks = [];
     var sendKey = null;
     var bellSoon = null;
@@ -245,8 +246,15 @@
     /* ---------- home ---------- */
 
     function loadAccounts() {
-        return api('/accounts').then(function (r) {
-            accounts = r.data || [];
+        var walletsCall = api('/wallets').then(function (r) {
+            return r.data || [];
+        }, function () {
+            return [];   // wallet list is extra; never block the home screen
+        });
+
+        return Promise.all([api('/accounts'), walletsCall]).then(function (res) {
+            accounts = res[0].data || [];
+            wallets = res[1];
             renderAccounts();
         }, function (e) {
             toast(friendly(e), true);
@@ -286,6 +294,29 @@
             }
 
             card.appendChild(top);
+
+            var mine = wallets.filter(function (w) {
+                return w.accountNumber === a.accountNumber;
+            });
+
+            if (mine.length) {
+                var walletList = el('div', 'wallet-list');
+
+                mine.forEach(function (w) {
+                    var line = el('div', 'wallet-row');
+                    var label = w.currency + (w.home ? ' (home)' : '');
+
+                    if (w.status !== 'ACTIVE') {
+                        label += ' - ' + w.status.toLowerCase();
+                    }
+
+                    line.appendChild(el('span', 'wallet-code', label));
+                    line.appendChild(el('span', 'wallet-amount', w.display));
+                    walletList.appendChild(line);
+                });
+
+                card.appendChild(walletList);
+            }
 
             var actions = el('div', 'row');
             var fund = el('button', 'secondary', 'Add test money');
