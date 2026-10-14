@@ -17,6 +17,11 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("select w from Wallet w where w.account.accountNumber = :number and w.currency = 'NGN'")
     Optional<Wallet> findNgnForUpdate(@Param("number") String number);
 
+    /** Locks one wallet row, any currency, parked or not. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select w from Wallet w where w.account.accountNumber = :number and w.currency = :currency")
+    Optional<Wallet> findForUpdate(@Param("number") String number, @Param("currency") String currency);
+
     /** Rows: [account_number, currency, balance_minor] for every wallet of every account, parked or not. */
     @Query("select w.account.accountNumber, w.currency, w.balanceMinor from Wallet w")
     List<Object[]> allBalances();

@@ -9,6 +9,7 @@
     var me = null;
     var accounts = [];
     var wallets = [];
+    var currencyList = [];
     var banks = [];
     var sendKey = null;
     var bellSoon = null;
@@ -40,7 +41,14 @@
         LOOKUP_LIMIT_REACHED: 'The daily limit for live account-name checks is used up (Paystack test mode). Try again tomorrow.',
         COUNTRY_NOT_SUPPORTED: 'PayBridge is not available in your country yet.',
         COUNTRY_UNDETECTED: 'We could not work out your country right now. Please try again.',
-        ACCOUNT_EXISTS: 'You already have an account.'
+        ACCOUNT_EXISTS: 'You already have an account.',
+        PARK_REQUIRED: 'All 4 wallet slots are in use. Choose a wallet to park.',
+        PARK_NOT_NEEDED: 'You have a free wallet slot, so nothing needs to be parked.',
+        PARK_INVALID: 'You can only park a wallet that is active.',
+        WALLET_HOME_FIXED: 'Your home wallet cannot be parked.',
+        WALLET_ALREADY_ACTIVE: 'That wallet is already active.',
+        WALLET_PARKED: 'This wallet is parked. Reactivate it first.',
+        UNSUPPORTED_CURRENCY: 'That currency is not supported.'
     };
 
     function friendly(err) {
@@ -190,6 +198,7 @@
         token = null;
         me = null;
         accounts = [];
+        wallets = [];
 
         clearTimeout(bellSoon);
         clearInterval(pollTimer);
@@ -249,12 +258,21 @@
         var walletsCall = api('/wallets').then(function (r) {
             return r.data || [];
         }, function () {
-            return [];   // wallet list is extra; never block the home screen
+            return [];   // the wallet list is extra; never block the home screen
         });
 
-        return Promise.all([api('/accounts'), walletsCall]).then(function (res) {
+        var currenciesCall = currencyList.length
+            ? Promise.resolve(currencyList)
+            : api('/currencies').then(function (r) {
+                return r.data || [];
+            }, function () {
+                return [];
+            });
+
+        return Promise.all([api('/accounts'), walletsCall, currenciesCall]).then(function (res) {
             accounts = res[0].data || [];
             wallets = res[1];
+            currencyList = res[2];
             renderAccounts();
         }, function (e) {
             toast(friendly(e), true);
@@ -272,6 +290,7 @@
                 'hint',
                 'We could not find your account. Log out and back in, or contact support.'
             ));
+            renderSwap();
             return;
         }
 
@@ -312,6 +331,17 @@
 
                     line.appendChild(el('span', 'wallet-code', label));
                     line.appendChild(el('span', 'wallet-amount', w.display));
+
+                    if (w.currency !== 'NGN') {
+                        var add = el('button', 'secondary', 'Add test money');
+
+                        add.type = 'button';
+                        add.addEventListener('click', function () {
+                            fundWallet(a.accountNumber, w.currency);
+                        });
+                        line.appendChild(add);
+                    }
+
                     walletList.appendChild(line);
                 });
 
@@ -343,6 +373,8 @@
             card.appendChild(actions);
             list.appendChild(card);
         });
+
+        renderSwap();
     }
 
     function fundAccount(number) {
@@ -360,6 +392,79 @@
                 true
             );
         });
+    }
+
+    // Test money for one non-Naira wallet. A parked wallet can be funded too.
+    function fundWallet(number, currency) {
+        api('/dev/accounts/' + number + '/fund', {
+            method: 'POST',
+            body: { amount: 500, currency: currency }
+        }).then(function () {
+            toast('Added 500 ' + currency + ' of test money.', false);
+            loadAccounts();
+        }, function (e) {
+            toast(
+                e.status === 404
+                    ? 'Test money is switched off on this server.'
+                    : friendly(e),
+                true
+            );
+        });
+    }
+
+    // Fills the swap card: currencies that are not active yet, and (only when all 4 slots are used) the wallets that can be parked.
+    function renderSwap() {
+        var card = $('swapCard');
+        var pick = $('swapCurrency');
+        var park = $('swapPark');
+
+        clear(pick);
+        clear(park);
+
+        if (!accounts.length) {
+            card.hidden = true;
+            return;
+        }
+
+        var have = {};
+        var activeCount = 0;
+
+        wallets.forEach(function (w) {
+            have[w.currency] = w;
+
+            if (w.status === 'ACTIVE') {
+                activeCount++;
+            }
+        });
+
+        currencyList.forEach(function (c) {
+            var existing = have[c.code];
+
+            if (existing && existing.status === 'ACTIVE') {
+                return;
+            }
+
+            var o = el(
+                'option',
+                null,
+                c.code + ' - ' + c.name + (existing ? ' (parked, balance kept)' : '')
+            );
+
+            o.value = c.code;
+            pick.appendChild(o);
+        });
+
+        wallets.forEach(function (w) {
+            if (w.status === 'ACTIVE' && !w.home) {
+                var o = el('option', null, w.currency + ' (' + w.display + ')');
+
+                o.value = w.currency;
+                park.appendChild(o);
+            }
+        });
+
+        $('swapParkLabel').hidden = activeCount < 4;
+        card.hidden = false;
     }
 
     // A password field is used instead of window.prompt() so the PIN is masked.
@@ -655,7 +760,7 @@
                     showResult(
                         'wait',
                         'Still processing. We will notify you when the bank confirms. Reference '
-                            + reference
+                        + reference
                     );
                 }
             }, function () {
@@ -824,8 +929,8 @@
                     'title',
                     outgoing
                         ? 'To ' + (t.destinationBankName
-                            ? t.destinationBankName + ' '
-                            : '') + t.destinationAccountNumber
+                        ? t.destinationBankName + ' '
+                        : '') + t.destinationAccountNumber
                         : 'From ' + t.sourceAccountNumber
                 ));
 
@@ -841,7 +946,7 @@
                     'div',
                     'amount',
                     (outgoing ? '-' : '+')
-                        + money(outgoing ? t.totalDebit : t.amount)
+                    + money(outgoing ? t.totalDebit : t.amount)
                 );
 
                 btn.appendChild(main);
@@ -1083,11 +1188,21 @@
             });
         });
 
-        $('openAccount').addEventListener('click', function () {
-            api('/accounts', {
-                method: 'POST'
+        // Swap a wallet: activate a currency and, when all 4 slots are used, park one wallet.
+        $('swapForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var body = { currency: $('swapCurrency').value };
+
+            if (!$('swapParkLabel').hidden && $('swapPark').value) {
+                body.parkCurrency = $('swapPark').value;
+            }
+
+            api('/wallets/swap', {
+                method: 'POST',
+                body: body
             }).then(function () {
-                toast('Account opened.', false);
+                toast('Wallets updated.', false);
                 loadAccounts();
             }, function (err) {
                 toast(friendly(err), true);

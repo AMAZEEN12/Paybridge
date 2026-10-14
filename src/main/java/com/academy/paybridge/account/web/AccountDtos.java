@@ -26,9 +26,13 @@ public final class AccountDtos {
         }
     }
 
+    /** currency is optional and defaults to NGN. The number of decimals is checked against that currency. */
     public record FundRequest(
-            @NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 2) @Schema(example = "50000.00")
-            BigDecimal amount) {
+            @NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 3) @Schema(example = "50000.00")
+            BigDecimal amount,
+            @Pattern(regexp = "[A-Za-z]{3}", message = "must be a 3-letter currency code")
+            @Schema(example = "USD", description = "Defaults to NGN")
+            String currency) {
     }
 
     public record PinRequest(

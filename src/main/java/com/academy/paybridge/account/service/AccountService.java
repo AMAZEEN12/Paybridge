@@ -7,8 +7,10 @@ import com.academy.paybridge.account.api.AccountType;
 import com.academy.paybridge.account.api.AccountView;
 import com.academy.paybridge.account.domain.Account;
 import com.academy.paybridge.account.domain.Wallet;
+import com.academy.paybridge.account.domain.WalletStatus;
 import com.academy.paybridge.account.repository.AccountRepository;
 import com.academy.paybridge.account.repository.WalletRepository;
+import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
+import java.util.UUID;
 
 @Service
 public class AccountService implements AccountApi {
@@ -106,7 +109,7 @@ public class AccountService implements AccountApi {
         return view(a);
     }
 
-    /** Development only: money from nowhere. The controller that calls this is switched off in production. */
+    /** Development only: Naira from nowhere. The controller that calls this is switched off in production. */
     @Transactional
     public AccountView devFund(String accountNumber, Long customerId, long kobo) {
         getOwned(accountNumber, customerId);
@@ -114,6 +117,20 @@ public class AccountService implements AccountApi {
         ledger.recordFunding(accountNumber, kobo);
         audit.record("customer:" + customerId, "DEV_FUNDING", null,
                 "account " + Money.maskAccount(accountNumber) + " +" + kobo + " kobo");
+        return view(accounts.findByAccountNumber(accountNumber).orElseThrow());
+    }
+
+    /** Development only: money from nowhere in any currency. A parked wallet can be funded too (R-DEV-1). */
+    @Transactional
+    public AccountView devFund(String accountNumber, Long customerId, String currency, long minor) {
+        getOwned(accountNumber, customerId);
+        credit(accountNumber, currency, minor);
+        ledger.recordJournal("FUND:" + UUID.randomUUID(), null, "FUNDING", List.of(
+                new JournalLine(LedgerApi.EXT_FUNDING, JournalLine.Side.DEBIT, currency, minor),
+                new JournalLine(LedgerApi.walletKey(accountNumber, currency), JournalLine.Side.CREDIT,
+                        currency, minor)));
+        audit.record("customer:" + customerId, "DEV_FUNDING", null,
+                "account " + Money.maskAccount(accountNumber) + " +" + minor + " " + currency + " (minor units)");
         return view(accounts.findByAccountNumber(accountNumber).orElseThrow());
     }
 
@@ -160,12 +177,7 @@ public class AccountService implements AccountApi {
     public void debit(String accountNumber, long kobo) {
         Wallet w = wallets.findNgnForUpdate(accountNumber)
                 .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
-        if (w.getAccount().getStatus() == AccountStatus.FROZEN) {
-            throw ApiException.unprocessable("ACCOUNT_FROZEN", "This account is frozen. Unfreeze it to send money.");
-        }
-        if (w.getBalanceMinor() < kobo) {
-            throw ApiException.unprocessable("INSUFFICIENT_FUNDS", "You do not have enough money, including charges.");
-        }
+        checkCanDebit(w, kobo);
         w.setBalanceMinor(w.getBalanceMinor() - kobo);
         wallets.save(w);
     }
@@ -177,6 +189,45 @@ public class AccountService implements AccountApi {
                 .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
         w.setBalanceMinor(Math.addExact(w.getBalanceMinor(), kobo));
         wallets.save(w);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void debit(String accountNumber, String currency, long minor) {
+        Wallet w = wallets.findForUpdate(accountNumber, currency)
+                .orElseThrow(() -> ApiException.notFound("WALLET_NOT_FOUND", "Wallet not found."));
+        checkCanDebit(w, minor);
+        w.setBalanceMinor(w.getBalanceMinor() - minor);
+        wallets.save(w);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void credit(String accountNumber, String currency, long minor) {
+        if (minor <= 0) {
+            throw new IllegalArgumentException("A credit must be positive.");
+        }
+        Wallet w = wallets.findForUpdate(accountNumber, currency)
+                .orElseThrow(() -> ApiException.notFound("WALLET_NOT_FOUND", "Wallet not found."));
+        w.setBalanceMinor(Math.addExact(w.getBalanceMinor(), minor));     // a parked wallet may receive
+        wallets.save(w);
+    }
+
+    /** Frozen account, parked wallet and too little money all stop a debit (R-WAL-6, R-WAL-8). */
+    private static void checkCanDebit(Wallet w, long minor) {
+        if (minor <= 0) {
+            throw new IllegalArgumentException("A debit must be positive.");
+        }
+        if (w.getAccount().getStatus() == AccountStatus.FROZEN) {
+            throw ApiException.unprocessable("ACCOUNT_FROZEN", "This account is frozen. Unfreeze it to send money.");
+        }
+        if (w.getStatus() == WalletStatus.PARKED) {
+            throw ApiException.unprocessable("WALLET_PARKED",
+                    "This wallet is parked. Reactivate it to send or convert from it.");
+        }
+        if (w.getBalanceMinor() < minor) {
+            throw ApiException.unprocessable("INSUFFICIENT_FUNDS", "You do not have enough money, including charges.");
+        }
     }
 
     @Override
