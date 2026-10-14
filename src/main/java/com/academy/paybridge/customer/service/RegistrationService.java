@@ -5,6 +5,8 @@ import com.academy.paybridge.customer.geo.ClientCountryResolver;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.CountryInfo;
 import com.academy.paybridge.shared.money.CountryRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class RegistrationService {
+
+    private static final Logger log = LoggerFactory.getLogger(RegistrationService.class);
 
     public record Result(CustomerView customer, String country, String countryName, String homeCurrency) {
     }
@@ -35,8 +39,12 @@ public class RegistrationService {
     public Result register(String fullName, String email, String password,
                            String clientIpHeaderValue, String remoteAddress) {
         String code = resolver.countryOf(clientIpHeaderValue, remoteAddress);
-        CountryInfo country = countries.supported(code).orElseThrow(() -> ApiException.unprocessable(
-                "COUNTRY_NOT_SUPPORTED", "PayBridge is not available in your country yet."));
+        CountryInfo country = countries.supported(code).orElseThrow(() -> {
+            // The country code only, never the IP address.
+            log.warn("Sign-up refused: detected country code {} is not supported", code);
+            return ApiException.unprocessable(
+                    "COUNTRY_NOT_SUPPORTED", "PayBridge is not available in your country yet.");
+        });
         CustomerView customer = auth.register(fullName, email, password, country);
         return new Result(customer, country.code(), country.name(), country.currencyCode());
     }
