@@ -79,6 +79,16 @@ paybridge:
     client-ip-header: ${PAYBRIDGE_GEO_CLIENT_IP_HEADER:True-Client-IP}
     allow-override: ${PAYBRIDGE_GEO_ALLOW_OVERRIDE:false}        # never set this on Render
     override-country: ${PAYBRIDGE_GEO_OVERRIDE_COUNTRY:}        # tests and local development only
+  fx:
+    provider: ${PAYBRIDGE_FX_PROVIDER:stub}      # stub or openexchangerates. Tests and local runs stay on stub.
+    base-url: https://openexchangerates.org/api
+    app-id: ${OXR_APP_ID:}
+    timeout-ms: 5000
+    refresh-interval: PT1H
+    check-interval: PT10M
+    max-snapshot-age: PT3H
+    on-demand-refresh-min-gap: PT10M
+    quota-stop-percent: 95
   charges:
     vat-rate: 0.075
     stamp-duty-kobo: 5000

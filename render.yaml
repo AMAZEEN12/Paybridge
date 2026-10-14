@@ -19,6 +19,10 @@ services:
         fromDatabase:
           name: paybridge-db
           property: host
+      - key: OXR_APP_ID
+        sync: false
+      - key: PAYBRIDGE_FX_PROVIDER
+        value: stub                  # change to openexchangerates at step 7
       - key: DB_PORT
         fromDatabase:
           name: paybridge-db
