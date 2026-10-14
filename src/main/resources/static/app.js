@@ -221,7 +221,7 @@
 
     /* ---------- views ---------- */
 
-    var VIEWS = ['home', 'send', 'history', 'alerts'];
+    var VIEWS = ['home', 'send', 'convert', 'history', 'alerts'];
 
     function showView(name) {
         VIEWS.forEach(function (v) {
@@ -249,6 +249,9 @@
 
         if (name === 'alerts') {
             loadAlerts();
+        }
+        if (name === 'convert' && window.PayBridgeConvert) {
+            window.PayBridgeConvert.open();
         }
     }
 
@@ -1228,6 +1231,14 @@
             });
         });
     }
+
+    window.PayBridge = {
+        api: api,
+        toast: toast,
+        friendly: friendly,
+        el: el,
+        clear: clear
+    };
 
     wire();
 })();

@@ -80,7 +80,7 @@ paybridge:
     allow-override: ${PAYBRIDGE_GEO_ALLOW_OVERRIDE:false}        # never set this on Render
     override-country: ${PAYBRIDGE_GEO_OVERRIDE_COUNTRY:}        # tests and local development only
   fx:
-    provider: ${PAYBRIDGE_FX_PROVIDER:stub}      # stub or openexchangerates. Tests and local runs stay on stub.
+    provider: openexchangerates      # stub or openexchangerates. Tests and local runs stay on stub.
     base-url: https://openexchangerates.org/api
     app-id: ${OXR_APP_ID:}
     timeout-ms: 5000
@@ -129,4 +129,4 @@ paybridge:
     conversion-max-usd: 1000
     daily-max-usd: 5000
     velocity-max-conversions: 5
-    velocity-window-minutes: 10
+    velocity-window-minutes: 10

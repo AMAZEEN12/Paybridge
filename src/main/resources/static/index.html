@@ -44,6 +44,7 @@
     <div class="tabs" role="tablist">
       <button class="tab active" data-view="home" type="button">Home</button>
       <button class="tab" data-view="send" type="button">Send money</button>
+      <button class="tab" data-view="convert" type="button">Convert</button>
       <button class="tab" data-view="history" type="button">History</button>
       <button class="tab" data-view="alerts" type="button">Alerts</button>
     </div>
@@ -106,6 +107,30 @@
       <div class="result" id="sendResult" hidden></div>
     </div>
 
+    <div id="convertView" class="card" hidden>
+      <h2>Convert money</h2>
+      <p class="hint" id="convHint" hidden></p>
+      <form id="convertForm" class="form">
+        <label>From
+          <select id="convFrom" required></select>
+        </label>
+        <label>To
+          <select id="convTo" required></select>
+        </label>
+        <label>Amount <span id="convCcy"></span>
+          <input id="convAmount" type="number" min="0" step="any" inputmode="decimal" required>
+        </label>
+        <button class="primary" id="convQuoteButton" type="submit">Get quote</button>
+      </form>
+      <div class="quote" id="convQuote" hidden></div>
+      <p class="hint" id="convCountdown" hidden></p>
+      <div class="row" id="convActions" hidden>
+        <button class="primary" id="convConfirm" type="button">Confirm conversion</button>
+        <button id="convCancel" type="button">Cancel</button>
+      </div>
+      <div class="result" id="convResult" hidden></div>
+    </div>
+
     <div id="historyView" class="card" hidden>
       <h2>History</h2>
       <label>Account
@@ -123,5 +148,6 @@
 </main>
 
 <script src="/app.js"></script>
+<script src="/convert.js"></script>
 </body>
 </html>
