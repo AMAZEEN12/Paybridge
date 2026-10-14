@@ -22,4 +22,13 @@ public interface RateApi {
     record SnapshotInfo(long id, String provider, Instant providerTimestamp, Instant fetchedAt) { }
 
     record RateResult(BigDecimal rate, SnapshotInfo snapshot) { }
+
+    /**
+     * The rate from one currency to another AND from the first currency to USD, both derived from the SAME snapshot,
+     * so a refresh between two calls can never mix two snapshots in one quote. Same rules as rate(): call it BEFORE
+     * opening a database transaction.
+     */
+    RateWithUsd rateWithUsd(String from, String to);
+
+    record RateWithUsd(BigDecimal rate, BigDecimal toUsd, SnapshotInfo snapshot) { }
 }

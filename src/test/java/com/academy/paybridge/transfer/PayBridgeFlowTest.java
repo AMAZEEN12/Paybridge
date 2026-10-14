@@ -762,11 +762,17 @@ class PayBridgeFlowTest {
         assertThat(report.ok()).isTrue();
         assertThat(report.inFlightKobo()).isGreaterThan(0L);
 
-        assertThat(
-                report.heldKobo()
-                        + report.inFlightKobo()
-                        + report.paidOutKobo()
-        ).isEqualTo(report.fundedKobo());
+        // The money-in rule now has an FX term: customers converting Naira move it into EXT:FX_POOL:NGN, and the
+        // shared test database keeps those rows. report.problems() above already proves the rule; this repeats it
+        // in the original form, with the FX term read straight from the ledger.
+        long fx = jdbc.queryForObject("""
+                select coalesce(sum(case when direction = 'CREDIT' then amount_minor else -amount_minor end), 0)::bigint
+                from ledger_entries
+                where currency = 'NGN' and account_number like 'EXT:FX\\_%'
+                """, Long.class);
+
+        assertThat(report.heldKobo() + report.inFlightKobo() + report.paidOutKobo() + fx)
+                .isEqualTo(report.fundedKobo());
     }
 
     @Test

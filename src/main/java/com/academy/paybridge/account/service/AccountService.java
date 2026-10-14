@@ -5,6 +5,7 @@ import com.academy.paybridge.account.api.AccountStatus;
 import com.academy.paybridge.account.api.AccountStatusChangedEvent;
 import com.academy.paybridge.account.api.AccountType;
 import com.academy.paybridge.account.api.AccountView;
+import com.academy.paybridge.account.api.WalletView;
 import com.academy.paybridge.account.domain.Account;
 import com.academy.paybridge.account.domain.Wallet;
 import com.academy.paybridge.account.domain.WalletStatus;
@@ -236,6 +237,38 @@ public class AccountService implements AccountApi {
         return accounts.findByAccountNumber(accountNumber)
                 .map(a -> a.getStatus() == AccountStatus.FROZEN).orElse(false);
     }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockForConversion(String accountNumber, String sourceCurrency, String targetCurrency) {
+        Account account = accounts.findForUpdate(accountNumber)
+                .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
+        if (account.getStatus() == AccountStatus.FROZEN) {
+            throw ApiException.unprocessable("ACCOUNT_FROZEN", "This account is frozen. Unfreeze it to convert money.");
+        }
+        for (String c : new TreeSet<>(List.of(sourceCurrency, targetCurrency))) {
+            Wallet w = wallets.findForUpdate(accountNumber, c)
+                    .orElseThrow(() -> ApiException.notFound("WALLET_NOT_FOUND", "Wallet " + c + " not found."));
+            if (w.getStatus() == WalletStatus.PARKED) {
+                if (c.equals(sourceCurrency)) {
+                    throw ApiException.unprocessable("WALLET_PARKED",
+                            "This wallet is parked. Reactivate it to send or convert from it.");
+                } else {
+                    throw ApiException.unprocessable("WALLET_PARKED",
+                            "Target wallet is parked. Reactivate it before converting into it.");
+                }
+            }
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<WalletView> findWallet(String accountNumber, String currency) {
+        return wallets.findByAccountAccountNumberAndCurrency(accountNumber, currency)
+                .map(w -> new WalletView(w.getAccount().getAccountNumber(), w.getCurrency(),
+                        w.getBalanceMinor(), w.getStatus().name(), w.isHome()));
+    }
+
 
     /** Every wallet, keyed "<account_number>:<currency>", so reconciliation sees USD, EUR and GBP wallets too. */
     @Override

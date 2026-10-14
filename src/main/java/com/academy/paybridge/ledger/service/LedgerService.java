@@ -107,6 +107,29 @@ public class LedgerService implements LedgerApi {
         postJournal(journalKey, reference, entryType, lines);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordConversion(String quoteId, String accountNumber,
+                                 String sourceCurrency, String targetCurrency,
+                                 long sourceMinor, long feeMinor, long netMinor, long targetMinor) {
+        List<JournalLine> lines = new ArrayList<>();
+        lines.add(new JournalLine(LedgerApi.walletKey(accountNumber, sourceCurrency),
+                JournalLine.Side.DEBIT, sourceCurrency, sourceMinor));
+        lines.add(new JournalLine("EXT:FX_POOL:" + sourceCurrency,
+                JournalLine.Side.CREDIT, sourceCurrency, netMinor));
+        if (feeMinor > 0) {
+            lines.add(new JournalLine("EXT:FX_FEE:" + sourceCurrency,
+                    JournalLine.Side.CREDIT, sourceCurrency, feeMinor));
+        }
+        lines.add(new JournalLine("EXT:FX_POOL:" + targetCurrency,
+                JournalLine.Side.DEBIT, targetCurrency, targetMinor));
+        lines.add(new JournalLine(LedgerApi.walletKey(accountNumber, targetCurrency),
+                JournalLine.Side.CREDIT, targetCurrency, targetMinor));
+
+        postJournal("CONV:" + quoteId, quoteId, "CONVERSION", lines);
+    }
+
+
     /** The Naira-only methods convert real accounts to NGN wallet keys; EXT: accounts keep their names. */
     private void post(String journalKey, String reference, String type, List<Line> lines) {
         List<JournalLine> converted = new ArrayList<>();

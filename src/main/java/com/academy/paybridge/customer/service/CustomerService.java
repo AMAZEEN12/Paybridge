@@ -91,6 +91,7 @@ public class CustomerService implements CustomerApi {
     }
 
     static CustomerView view(Customer c) {
-        return new CustomerView(c.getId(), c.getFullName(), c.getEmail(), c.getPinHash() != null);
+        return new CustomerView(c.getId(), c.getFullName(), c.getEmail(), c.getPinHash() != null, c.getCreatedAt());
     }
 }
+
