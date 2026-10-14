@@ -44,13 +44,24 @@ public class Customer {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    // 1. add this field next to the others (for example after createdAt)
+    @Column(nullable = false, updatable = false, length = 2)
+    private String country;
+
+
+
+
+
     protected Customer() {
     }
 
-    public Customer(String fullName, String email, String passwordHash) {
+    // 2. replace the 3-argument constructor with this one
+    //    (keep anything else the old constructor body did, if it did more than these assignments)
+    public Customer(String fullName, String email, String passwordHash, String country) {
         this.fullName = fullName;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.country = country;
     }
 
     public Long getId() { return id; }
@@ -68,4 +79,8 @@ public class Customer {
     public Instant getLockedUntil() { return lockedUntil; }
     public void setLockedUntil(Instant v) { this.lockedUntil = v; }
     public Instant getCreatedAt() { return createdAt; }
+    // 3. add this getter
+    public String getCountry() {
+        return country;
+    }
 }

@@ -1,5 +1,7 @@
 package com.academy.paybridge.shared.config;
 
+import com.academy.paybridge.shared.money.CountryInfo;
+import com.academy.paybridge.shared.money.CountryRegistry;
 import com.academy.paybridge.shared.money.CurrencyInfo;
 import com.academy.paybridge.shared.money.CurrencyRegistry;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,10 +12,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Builds the CurrencyRegistry once, at start-up, from the currencies table (seeded by V10) and the exclusion list in
- * application.yml (paybridge.currencies.excluded, comma separated). Adding a currency is a new row, not new code.
- */
 @Configuration
 public class CurrencyConfig {
 
@@ -25,5 +23,12 @@ public class CurrencyConfig {
                 (rs, n) -> new CurrencyInfo(rs.getString("code"), rs.getString("name"), rs.getString("symbol"),
                         rs.getInt("minor_units"), rs.getBoolean("enabled")));
         return new CurrencyRegistry(rows, Arrays.stream(excluded.split(",")).map(String::trim).toList());
+    }
+
+    @Bean
+    public CountryRegistry countryRegistry(JdbcTemplate jdbc, CurrencyRegistry currencies) {
+        List<CountryInfo> rows = jdbc.query("select code, name, currency_code from countries",
+                (rs, n) -> new CountryInfo(rs.getString("code"), rs.getString("name"), rs.getString("currency_code")));
+        return new CountryRegistry(rows, currencies);
     }
 }

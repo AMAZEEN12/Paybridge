@@ -91,14 +91,6 @@ public class LedgerEntry {
         return amountMinor;
     }
 
-    /**
-     * Backward-compatible alias for older NGN code.
-     * The stored value is expressed in the currency's minor units.
-     */
-    public long getAmountKobo() {
-        return amountMinor;
-    }
-
     public String getCurrency() {
         return currency;
     }

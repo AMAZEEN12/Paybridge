@@ -44,4 +44,8 @@ public final class AuthDtos {
             return "SetPinRequest[***]";
         }
     }
+
+    public record RegisterResponse(Long id, String fullName, String email, boolean pinSet,
+                                   String country, String countryName, String homeCurrency) {
+    }
 }

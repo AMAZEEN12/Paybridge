@@ -17,7 +17,7 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     @Query("select w from Wallet w where w.account.accountNumber = :number and w.currency = 'NGN'")
     Optional<Wallet> findNgnForUpdate(@Param("number") String number);
 
-    /** Rows: [account_number, balance_minor] for every NGN wallet. Plain rows, so no entities are loaded. */
-    @Query("select w.account.accountNumber, w.balanceMinor from Wallet w where w.currency = 'NGN'")
-    List<Object[]> ngnBalances();
+    /** Rows: [account_number, currency, balance_minor] for every wallet of every account, parked or not. */
+    @Query("select w.account.accountNumber, w.currency, w.balanceMinor from Wallet w")
+    List<Object[]> allBalances();
 }
