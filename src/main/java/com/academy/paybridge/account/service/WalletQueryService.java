@@ -26,18 +26,21 @@ public class WalletQueryService {
     public List<WalletView> forCustomer(Long customerId) {
         List<WalletView> result = new ArrayList<>();
         for (Account a : accounts.findByCustomerIdOrderByIdAsc(customerId)) {
-            if (a.getType() != AccountType.CUSTOMER) {
-                continue;
-            }
-            for (Wallet w : a.getWallets()) {
-                result.add(new WalletView(a.getAccountNumber(), w.getCurrency(), w.getBalanceMinor(),
-                        w.getStatus().name(), w.isHome()));
+            if (a.getType() == AccountType.CUSTOMER) {
+                result.addAll(viewsOf(a));
             }
         }
-        // Home wallet first, then the others by currency code.
-        result.sort(Comparator.comparing(WalletView::accountNumber)
-                .thenComparing(w -> !w.home())
-                .thenComparing(WalletView::currency));
+        return result;
+    }
+
+    /** Home wallet first, then the others by currency code. */
+    static List<WalletView> viewsOf(Account a) {
+        List<WalletView> result = new ArrayList<>();
+        for (Wallet w : a.getWallets()) {
+            result.add(new WalletView(a.getAccountNumber(), w.getCurrency(), w.getBalanceMinor(),
+                    w.getStatus().name(), w.isHome()));
+        }
+        result.sort(Comparator.comparing((WalletView w) -> !w.home()).thenComparing(WalletView::currency));
         return result;
     }
 }

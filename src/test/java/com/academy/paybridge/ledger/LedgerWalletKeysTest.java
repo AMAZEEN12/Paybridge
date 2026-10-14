@@ -87,7 +87,7 @@ class LedgerWalletKeysTest {
                 SELECT COUNT(*)
                 FROM ledger_entries
                 WHERE account_number NOT LIKE 'EXT:%'
-                  AND account_number NOT LIKE '%:NGN'
+                  AND account_number NOT LIKE '%:' || currency
                 """,
                 Integer.class
         );

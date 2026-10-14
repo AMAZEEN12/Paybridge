@@ -1,16 +1,16 @@
 :root {
-  --bg: #f5f8f6; --surface: #ffffff; --fg: #15221c; --muted: #586b62; --line: #d6e0da;
-  --accent: #0b7a4b; --accent-ink: #ffffff; --accent-soft: #e2f2e9;
-  --warn: #9a5b00; --warn-soft: #fbf0da; --stop: #a32d2d; --stop-soft: #fbe7e5;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bg: #f5f8f6; --surface: #ffffff; --fg: #15221c; --muted: #586b62; --line: #d6e0da;
+    --accent: #0b7a4b; --accent-ink: #ffffff; --accent-soft: #e2f2e9;
+    --warn: #9a5b00; --warn-soft: #fbf0da; --stop: #a32d2d; --stop-soft: #fbe7e5;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1512; --surface: #141e1a; --fg: #e3ece7; --muted: #92a59b; --line: #25332d;
-    --accent: #4cc38a; --accent-ink: #06150e; --accent-soft: #16312a;
-    --warn: #e8b45a; --warn-soft: #2e2512; --stop: #f08a82; --stop-soft: #341a18;
-    color-scheme: dark;
-  }
+    :root {
+        --bg: #0d1512; --surface: #141e1a; --fg: #e3ece7; --muted: #92a59b; --line: #25332d;
+        --accent: #4cc38a; --accent-ink: #06150e; --accent-soft: #16312a;
+        --warn: #e8b45a; --warn-soft: #2e2512; --stop: #f08a82; --stop-soft: #341a18;
+        color-scheme: dark;
+    }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -75,15 +75,19 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .toast { position: sticky; top: 8px; z-index: 5; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; background: var(--fg); color: var(--bg); }
 .toast.bad { background: var(--stop); color: #fff; }
 @media print {
-  body * { visibility: hidden; }
-  .receipt, .receipt * { visibility: visible; }
-  .receipt { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; background: #fff; color: #000; }
-  .receipt .noprint { display: none; }
+    body * { visibility: hidden; }
+    .receipt, .receipt * { visibility: visible; }
+    .receipt { position: absolute; inset: 0 auto auto 0; width: 100%; border: 0; background: #fff; color: #000; }
+    .receipt .noprint { display: none; }
 }
 
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
 .pinbox { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px; }
 .pinbox p { margin: 0; }
-.wallet-list { margin-top: .75rem; border-top: 1px solid rgba(128, 128, 128, .25); padding-top: .5rem; }
-.wallet-row { display: flex; justify-content: space-between; padding: .25rem 0; font-variant-numeric: tabular-nums; }
-.wallet-code { opacity: .8; }
+
+/* Wallet list inside the account card */
+.wallet-list { margin-top: .75rem; border-top: 1px solid var(--line); padding-top: .5rem; }
+.wallet-row { display: flex; align-items: center; gap: .75rem; padding: .25rem 0; font-variant-numeric: tabular-nums; }
+.wallet-code { flex: 1; color: var(--muted); }
+.wallet-amount { font-weight: 600; }
+.wallet-row button { padding: .15rem .5rem; font-size: .8rem; }
