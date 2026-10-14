@@ -262,6 +262,17 @@ reconciliation job comparing keys of different shapes; the payout reserve/refund
 **Done when:** a manual run against the real provider (one call) stores a snapshot with NGN present, and the suite
 passes with the network disabled.
 
+**As built (departures from the text above).**
+- *Tables:* rates are stored in a child table `fx_snapshot_rates (snapshot_id, currency, rate NUMERIC(24,12))` instead of a JSON column,
+  so rates stay `BigDecimal` end to end. Migration is `V12__fx_rate_snapshots.sql`.
+- *Provider choice:* `paybridge.fx.provider` is `stub` (default) or `openexchangerates`. The app refuses to start if
+  `openexchangerates` is chosen without `OXR_APP_ID`. Render stays on `stub` until step 7.
+- *Refresh timing:* a job checks every 10 minutes (`paybridge.fx.check-interval`) and refreshes when our last successful
+  fetch is older than the refresh interval. Staleness uses the provider's timestamp. Back-off is 5, 10, 20, 40 minutes, then 1 hour.
+- *Quota:* the usage endpoint is checked before each fetch; at 95% refreshing pauses and retries hourly.
+- *Names:* `RateApi` (read side), `RateProvider` (provider side), `RateService`, `OpenExchangeRatesClient`, `StubRateProvider`.
+- *For step 6:* call `RateApi.rate()` before opening a transaction. It may make an HTTP call.
+
 ---
 
 ## 9. Step 6: Quotes and conversion (needs steps 4 and 5)

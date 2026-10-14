@@ -115,3 +115,18 @@ paybridge:
     lock-minutes: 15
   resolve-limit-per-minute: 10
   zone: Africa/Lagos
+  conversion:
+    enabled: ${PAYBRIDGE_CONVERSION_ENABLED:false}
+  quotes:
+    conversion-ttl: PT60S
+    transfer-ttl: PT30M
+    max-active-per-customer: 5
+    stuck-executing-limit: PT5M
+  fee:
+    rate: 0.005
+    free-days: 30
+  limits:
+    conversion-max-usd: 1000
+    daily-max-usd: 5000
+    velocity-max-conversions: 5
+    velocity-window-minutes: 10

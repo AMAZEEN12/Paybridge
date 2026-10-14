@@ -1,5 +1,6 @@
 package com.academy.paybridge.fx.service;
 
+import com.academy.paybridge.fx.api.RateApi;
 import com.academy.paybridge.fx.api.RateProvider;
 import com.academy.paybridge.fx.api.RatesUnavailableException;
 import com.academy.paybridge.fx.client.StubRateProvider;
@@ -233,6 +234,37 @@ class RateServiceTest {
         first.get(5, TimeUnit.SECONDS);
         pool.shutdown();
         assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    void rateWithUsdGivesBothRatesFromTheSameSnapshot() {
+        RateService svc = service();
+        svc.refreshIfDue();
+
+        RateApi.RateWithUsd r = svc.rateWithUsd("NGN", "EUR");
+
+        assertThat(r.rate()).isEqualByComparingTo(svc.rate("NGN", "EUR").rate());
+        assertThat(r.toUsd()).isEqualByComparingTo("0.000666666667");
+        assertThat(r.snapshot().id()).isEqualTo(svc.latest().orElseThrow().id());
+    }
+
+    @Test
+    void theUsdRateOfUsdIsExactlyOneAndAMissingCurrencyIsRefused() {
+        RateService svc = service();
+        svc.refreshIfDue();
+
+        assertThat(svc.rateWithUsd("USD", "NGN").toUsd()).isEqualByComparingTo("1");
+        assertThatThrownBy(() -> svc.rateWithUsd("USD", "XYZ")).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void rateWithUsdRefusesStaleRatesLikeRateDoes() {
+        RateService svc = service();
+        svc.refreshIfDue();
+        clock.set(T0.plus(Duration.ofHours(4)));
+        provider.setFailing(true);
+
+        assertThatThrownBy(() -> svc.rateWithUsd("USD", "NGN")).isInstanceOf(RatesUnavailableException.class);
     }
 
     private static RateSnapshot snapshot(Instant providerTimestamp, Instant fetchedAt) {

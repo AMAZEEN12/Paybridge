@@ -100,6 +100,20 @@ public class RateService implements RateApi {
     public RateResult rate(String from, String to) {
         String a = normalise(from);
         String b = normalise(to);
+        RateSnapshot snapshot = freshSnapshot();
+        return new RateResult(cross(snapshot, a, b), info(snapshot));
+    }
+
+    @Override
+    public RateWithUsd rateWithUsd(String from, String to) {
+        String a = normalise(from);
+        String b = normalise(to);
+        RateSnapshot snapshot = freshSnapshot();
+        return new RateWithUsd(cross(snapshot, a, b), cross(snapshot, a, "USD"), info(snapshot));
+    }
+
+    /** The newest snapshot, after one on-demand refresh if it is stale. Read ONCE so every rate in a call matches. */
+    private RateSnapshot freshSnapshot() {
         RateSnapshot snapshot = latest;
         if (isStale(snapshot)) {
             refresh(true);
@@ -108,12 +122,16 @@ public class RateService implements RateApi {
                 throw new RatesUnavailableException();
             }
         }
-        BigDecimal rateA = snapshot.rates().get(a);
-        BigDecimal rateB = snapshot.rates().get(b);
-        if (rateA == null || rateB == null) {
-            throw ApiException.badRequest("NO_RATE", "No exchange rate is available for " + a + " to " + b + ".");
+        return snapshot;
+    }
+
+    private BigDecimal cross(RateSnapshot snapshot, String from, String to) {
+        BigDecimal rateFrom = snapshot.rates().get(from);
+        BigDecimal rateTo = snapshot.rates().get(to);
+        if (rateFrom == null || rateTo == null) {
+            throw ApiException.badRequest("NO_RATE", "No exchange rate is available for " + from + " to " + to + ".");
         }
-        return new RateResult(rateB.divide(rateA, RATE_SCALE, RoundingMode.HALF_EVEN), info(snapshot));
+        return rateTo.divide(rateFrom, RATE_SCALE, RoundingMode.HALF_EVEN);
     }
 
     private boolean isStale(RateSnapshot snapshot) {

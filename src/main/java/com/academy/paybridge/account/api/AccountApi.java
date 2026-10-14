@@ -17,6 +17,9 @@ public interface AccountApi {
      */
     AccountView openHomeAccount(Long customerId, String homeCurrency);
 
+    /** The customer's single account, created at sign-up. */
+    AccountView existingFor(Long customerId);
+
     AccountView getOwned(String accountNumber, Long customerId);
 
     AccountView getCustomerAccount(String accountNumber);
@@ -41,6 +44,15 @@ public interface AccountApi {
     void credit(String accountNumber, String currency, long minor);
 
     boolean isFrozen(String accountNumber);
+
+    /**
+     * Locks the account row, then both wallets in sorted currency order (R-CONV-4, concern C).
+     * Refuses frozen accounts and parked wallets. Needs a transaction.
+     */
+    void lockForConversion(String accountNumber, String sourceCurrency, String targetCurrency);
+
+    /** Looks up one wallet of an account for reading, or empty if it does not exist. */
+    Optional<WalletView> findWallet(String accountNumber, String currency);
 
     /**
      * The balance of EVERY wallet, in minor units, keyed "<account_number>:<currency>" (the ledger's key shape).

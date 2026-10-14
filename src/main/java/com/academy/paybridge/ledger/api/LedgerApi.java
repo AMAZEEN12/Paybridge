@@ -47,6 +47,16 @@ public interface LedgerApi {
     void recordJournal(String journalKey, String reference, String entryType, List<JournalLine> lines);
 
     /**
+     * Records a conversion between two wallets of the same account (spec 7.2).
+     * Debits source wallet, credits FX pool and fee in source currency, debits FX pool in target currency,
+     * and credits target wallet.
+     * Journal key is "CONV:<quoteId>".
+     */
+    void recordConversion(String quoteId, String accountNumber,
+                          String sourceCurrency, String targetCurrency,
+                          long sourceMinor, long feeMinor, long netMinor, long targetMinor);
+
+    /**
      * The ledger key of one wallet: "<account_number>:<currency>",
      * for example "2000000001:NGN".
      * EXT: accounts are not wallets and keep their names.
