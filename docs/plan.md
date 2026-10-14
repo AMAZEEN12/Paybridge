@@ -10,10 +10,10 @@ Implements: `spec.md` (from `001-multi-currency-wallets.md`)
 | 0 | Baseline and guardrails | Build green. Hooks self-test not confirmed. |
 | 1 | Wallets, NGN only | Code done, all four commits green (V8 reset + ledger columns; V9 wallets + account module; ledger wallet keys). Left: hand check on the web page, review, deploy. |
 | 2 | Currencies and per-currency ledger | Built (branch step-2-currency-fix). V10 country and currency lists still to verify before release.  |
-| 3 | Sign-up with country and the single account | Not started |
+| 3 | Sign-up with country and the single account | Done |
 | 4 | Swap, park and receive-only wallets | Code done (merged). Left: hand check on the web page, review, deploy. |
-| 5 | Rates (parallel track) | Not started |
-| 6 | Quotes and conversion | Not started |
+| 5 | Rates (parallel track) | Done |
+| 6 | Quotes and conversion | Done |
 | 7 | Convert screen, clean-up and release | Not started |
 
 This plan was drafted from a read of the code and should be checked in Claude Code plan mode against the real
