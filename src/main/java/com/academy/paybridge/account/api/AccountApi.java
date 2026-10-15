@@ -61,4 +61,11 @@ public interface AccountApi {
      * Throws ACCOUNT_NOT_FOUND (404) for an unknown number and for a system account. Read-only.
      */
     List<String> receivableCurrencies(String accountNumber);
+
+    /**
+     * Like {@link #lockInOrder}, but locks each account's wallet in the given currency instead of its NGN wallet, so a
+     * customer with no Naira wallet (a UK home account, for example) can still send and receive. Sorted by account
+     * number, no duplicates. Throws WALLET_NOT_FOUND if an account has no wallet in that currency. Needs a transaction.
+     */
+    void lockWalletsInOrder(Collection<String> accountNumbers, String currency);
 }

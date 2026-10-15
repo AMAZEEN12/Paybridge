@@ -1,5 +1,7 @@
 package com.academy.paybridge.transfer.web;
 
+import com.academy.paybridge.shared.money.CurrencyInfo;
+import com.academy.paybridge.shared.money.CurrencyRegistry;
 import com.academy.paybridge.transfer.api.TransferStatus;
 import com.academy.paybridge.transfer.api.TransferType;
 import com.academy.paybridge.transfer.charges.Charges;
@@ -31,6 +33,11 @@ public final class TransferDtos {
             @NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 2, message = "at most 2 decimal places")
             @Schema(example = "5000.00")
             BigDecimal amount,
+
+            @Pattern(regexp = "[A-Za-z]{3}", message = "must be a 3-letter currency code")
+            @Schema(description = "Optional. The wallet to send from; the recipient receives the same currency. Defaults to NGN.",
+                    example = "USD")
+            String currency,
 
             @Size(max = 140) @Schema(example = "Rent") String narration,
             @NotBlank @Pattern(regexp = "\\d{4}", message = "must be exactly 4 digits") @Schema(example = "1234")
@@ -81,15 +88,19 @@ public final class TransferDtos {
             String reference, TransferType type, TransferStatus status,
             String sourceAccountNumber, String destinationAccountNumber,
             String destinationBankCode, String destinationBankName, String destinationAccountName,
-            BigDecimal amount, BigDecimal fee, BigDecimal vat, BigDecimal stampDuty, BigDecimal totalDebit,
+            String currency, BigDecimal amount, BigDecimal fee, BigDecimal vat, BigDecimal stampDuty, BigDecimal totalDebit,
             String narration, String note, Instant createdAt, Instant updatedAt) {
 
-        public static TransferResponse from(Transfer t) {
+        /** Amounts are shown with the decimals of the transfer's own currency (2 for NGN and USD, 0 for JPY). */
+        public static TransferResponse from(Transfer t, CurrencyRegistry currencies) {
+            int decimals = currencies.find(t.getCurrency()).map(CurrencyInfo::minorUnits).orElse(2);
             return new TransferResponse(t.getReference(), t.getType(), t.getStatus(),
                     t.getSourceAccountNumber(), t.getDestinationAccountNumber(),
                     t.getDestinationBankCode(), t.getDestinationBankName(), t.getDestinationAccountName(),
-                    Money.toNaira(t.getAmountMinor()), Money.toNaira(t.getFeeMinor()), Money.toNaira(t.getVatMinor()),
-                    Money.toNaira(t.getStampDutyMinor()), Money.toNaira(t.getTotalDebitMinor()),
+                    t.getCurrency(),
+                    BigDecimal.valueOf(t.getAmountMinor(), decimals), BigDecimal.valueOf(t.getFeeMinor(), decimals),
+                    BigDecimal.valueOf(t.getVatMinor(), decimals), BigDecimal.valueOf(t.getStampDutyMinor(), decimals),
+                    BigDecimal.valueOf(t.getTotalDebitMinor(), decimals),
                     t.getNarration(), t.getNote(), t.getCreatedAt(), t.getUpdatedAt());
         }
     }

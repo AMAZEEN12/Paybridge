@@ -2,6 +2,8 @@ package com.academy.paybridge.transfer.web;
 
 import com.academy.paybridge.shared.config.CurrentUser;
 import com.academy.paybridge.shared.exception.ApiException;
+import com.academy.paybridge.shared.money.CurrencyAmount;
+import com.academy.paybridge.shared.money.CurrencyRegistry;
 import com.academy.paybridge.shared.money.Money;
 import com.academy.paybridge.transfer.charges.Charges;
 import com.academy.paybridge.transfer.service.TransferResult;
@@ -39,9 +41,11 @@ public class TransferController {
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_.:\\-]{8,100}");
 
     private final TransferService service;
+    private final CurrencyRegistry currencies;
 
-    public TransferController(TransferService service) {
+    public TransferController(TransferService service, CurrencyRegistry currencies) {
         this.service = service;
+        this.currencies = currencies;
     }
 
     @PostMapping("/transfers/quote")
@@ -62,8 +66,11 @@ public class TransferController {
                     example = "demo-001")
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody InternalTransferRequest request) {
+        String currency = request.currency() == null || request.currency().isBlank()
+                ? "NGN" : request.currency().trim().toUpperCase(java.util.Locale.ROOT);
+        CurrencyAmount amount = currencies.parse(request.amount(), currency);   // refuses an unusable currency or too many decimals
         TransferResult result = service.transferInternal(CurrentUser.id(jwt), request.sourceAccountNumber(),
-                request.destinationAccountNumber(), Money.toKobo(request.amount()), request.narration(),
+                request.destinationAccountNumber(), currency, amount.minor(), request.narration(),
                 request.pin(), checkKey(idempotencyKey));
         return respond(result, HttpStatus.CREATED);
     }
@@ -86,13 +93,13 @@ public class TransferController {
     @GetMapping("/transfers/{reference}")
     @Operation(summary = "One transfer", description = "Visible to the sender, and to the receiver of an internal transfer.")
     public TransferResponse one(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference) {
-        return TransferResponse.from(service.getVisible(CurrentUser.id(jwt), reference));
+        return TransferResponse.from(service.getVisible(CurrentUser.id(jwt), reference), currencies);
     }
 
     @PostMapping("/transfers/{reference}/verify")
     @Operation(summary = "Ask the bank network what happened to a pending payout")
     public TransferResponse verify(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference) {
-        return TransferResponse.from(service.verify(CurrentUser.id(jwt), reference));
+        return TransferResponse.from(service.verify(CurrentUser.id(jwt), reference), currencies);
     }
 
     @GetMapping("/accounts/{accountNumber}/transfers")
@@ -101,7 +108,7 @@ public class TransferController {
                                           @RequestParam(defaultValue = "0") int page,
                                           @RequestParam(defaultValue = "20") int size) {
         return service.history(CurrentUser.id(jwt), accountNumber, page, size)
-                .map(TransferResponse::from).getContent();
+                .map(t -> TransferResponse.from(t, currencies)).getContent();
     }
 
     private static String checkKey(String key) {
@@ -113,8 +120,8 @@ public class TransferController {
         return trimmed;
     }
 
-    private static ResponseEntity<TransferResponse> respond(TransferResult result, HttpStatus createdStatus) {
-        TransferResponse body = TransferResponse.from(result.transfer());
+    private ResponseEntity<TransferResponse> respond(TransferResult result, HttpStatus createdStatus) {
+        TransferResponse body = TransferResponse.from(result.transfer(), currencies);
         if (result.replayed()) {
             return ResponseEntity.ok().header("Idempotent-Replay", "true").body(body);
         }

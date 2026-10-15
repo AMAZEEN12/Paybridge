@@ -11,8 +11,9 @@ public record TransferEvent(
         String sourceAccount,
         String destinationAccount,
         String destinationBankName,
-        long amountKobo,
-        long chargesKobo,
-        long totalDebitKobo,
+        String currency,
+        long amountMinor,
+        long chargesMinor,
+        long totalDebitMinor,
         boolean flagged) {
 }

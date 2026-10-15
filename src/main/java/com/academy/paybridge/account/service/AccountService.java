@@ -175,6 +175,15 @@ public class AccountService implements AccountApi {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public void lockWalletsInOrder(Collection<String> accountNumbers, String currency) {
+        for (String number : new TreeSet<>(accountNumbers)) {
+            wallets.findForUpdate(number, currency)
+                    .orElseThrow(() -> ApiException.notFound("WALLET_NOT_FOUND", "Wallet not found."));
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public void debit(String accountNumber, String currency, long minor) {
         Wallet w = wallets.findForUpdate(accountNumber, currency)
                 .orElseThrow(() -> ApiException.notFound("WALLET_NOT_FOUND", "Wallet not found."));

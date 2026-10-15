@@ -16,6 +16,8 @@
     var pollTimer = null;
     var quoteTimer = null;
     var resolveTicket = 0;
+    var recipient = null;
+    var currencyFormatters = {};
     var formatter = new Intl.NumberFormat('en-NG', {
         style: 'currency',
         currency: 'NGN'
@@ -37,6 +39,9 @@
         TRANSFER_NOT_APPROVED: 'This transfer was not approved. Please contact support.',
         IDEMPOTENCY_KEY_REUSED: 'This form was already used for a different transfer. Start again.',
         TOO_MANY_LOOKUPS: 'Too many lookups. Please wait a minute.',
+        RECIPIENT_CANNOT_RECEIVE: 'That account cannot receive this currency. Choose one it accepts.',
+        WALLET_NOT_FOUND: 'You do not have a wallet in that currency.',
+        INVALID_AMOUNT: 'That amount is not valid for this currency.',
         PROVIDER_UNAVAILABLE: 'We could not reach the bank network. Nothing was debited. Try again.',
         LOOKUP_LIMIT_REACHED: 'The daily limit for live account-name checks is used up (Paystack test mode). Try again tomorrow.',
         COUNTRY_NOT_SUPPORTED: 'PayBridge is not available in your country yet.',
@@ -65,6 +70,28 @@
 
     function money(value) {
         return formatter.format(Number(value));
+    }
+
+    /* Format an amount using the currency's own symbol and decimal places. */
+    function moneyIn(value, code) {
+        code = code || 'NGN';
+
+        if (code === 'NGN') {
+            return money(value);
+        }
+
+        try {
+            if (!currencyFormatters[code]) {
+                currencyFormatters[code] = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: code
+                });
+            }
+
+            return currencyFormatters[code].format(Number(value));
+        } catch (e) {
+            return code + ' ' + value;
+        }
     }
 
     function el(tag, className, text) {
@@ -205,7 +232,8 @@
 
         $('appView').hidden = true;
         $('who').hidden = true;
-        $('authView').hidden = false;      $('loginPassword').value = '';
+        $('authView').hidden = false;
+        $('loginPassword').value = '';
 
         if (message) {
             toast(message, false);
@@ -250,6 +278,7 @@
         if (name === 'alerts') {
             loadAlerts();
         }
+
         if (name === 'convert' && window.PayBridgeConvert) {
             window.PayBridgeConvert.open();
         }
@@ -261,7 +290,7 @@
         var walletsCall = api('/wallets').then(function (r) {
             return r.data || [];
         }, function () {
-            return [];   // the wallet list is extra; never block the home screen
+            return [];
         });
 
         var currenciesCall = currencyList.length
@@ -272,7 +301,11 @@
                 return [];
             });
 
-        return Promise.all([api('/accounts'), walletsCall, currenciesCall]).then(function (res) {
+        return Promise.all([
+            api('/accounts'),
+            walletsCall,
+            currenciesCall
+        ]).then(function (res) {
             accounts = res[0].data || [];
             wallets = res[1];
             currencyList = res[2];
@@ -582,6 +615,9 @@
 
                 sel.appendChild(o);
             });
+
+            $('currencyRow').hidden = isExternal();
+            fillSendCurrencies();
         });
 
         if (!banks.length) {
@@ -606,8 +642,122 @@
 
     function onKindChange() {
         $('bankRow').hidden = !isExternal();
+        $('currencyRow').hidden = isExternal();
         $('resolved').hidden = true;
+        recipient = null;
+        updateAmountField();
+        tryResolve();
         scheduleQuote();
+    }
+
+    /* A payout to an external bank is always in Naira. */
+    function sendCurrency() {
+        return isExternal() ? 'NGN' : ($('sendCurrency').value || 'NGN');
+    }
+
+    /* Only ACTIVE wallets of the selected account can be used to send. */
+    function fillSendCurrencies() {
+        var sel = $('sendCurrency');
+        var current = sel.value;
+        var from = $('sendFrom').value;
+
+        clear(sel);
+
+        wallets.filter(function (w) {
+            return w.accountNumber === from && w.status === 'ACTIVE';
+        }).forEach(function (w) {
+            var o = document.createElement('option');
+
+            o.value = w.currency;
+            o.textContent = w.currency + ' (' + w.display + ')';
+            sel.appendChild(o);
+        });
+
+        if (!sel.options.length) {
+            var naira = document.createElement('option');
+
+            naira.value = 'NGN';
+            naira.textContent = 'NGN';
+            sel.appendChild(naira);
+        }
+
+        if (current) {
+            sel.value = current;
+        }
+
+        onCurrencyChange();
+    }
+
+    function onCurrencyChange() {
+        updateAmountField();
+        showRecipientNote();
+        scheduleQuote();
+    }
+
+    /* The amount input follows the selected currency's decimal places. */
+    function updateAmountField() {
+        var code = sendCurrency();
+        var info = currencyList.filter(function (c) {
+            return c.code === code;
+        })[0];
+        var units = info && typeof info.minorUnits === 'number'
+            ? info.minorUnits
+            : 2;
+        var input = $('sendAmount');
+
+        $('sendCcy').textContent = '(' + code + ')';
+        input.step = units === 0 ? '1' : String(Math.pow(10, -units));
+        input.min = input.step;
+    }
+
+    /* Look up a PayBridge recipient and check the currencies they can receive. */
+    function lookupRecipient() {
+        var box = $('resolved');
+        var number = $('sendTo').value.trim();
+
+        recipient = null;
+        box.hidden = true;
+
+        if (!/^\d{10}$/.test(number)) {
+            return;
+        }
+
+        var ticket = ++resolveTicket;
+
+        api('/recipients/' + number).then(function (r) {
+            if (ticket !== resolveTicket) {
+                return;
+            }
+
+            recipient = r.data;
+            showRecipientNote();
+        }, function (e) {
+            if (ticket !== resolveTicket) {
+                return;
+            }
+
+            box.textContent = friendly(e);
+            box.className = 'resolved bad';
+            box.hidden = false;
+        });
+    }
+
+    function showRecipientNote() {
+        var box = $('resolved');
+
+        if (isExternal() || !recipient) {
+            return;
+        }
+
+        var code = sendCurrency();
+        var accepted = recipient.receivableCurrencies || [];
+        var ok = accepted.indexOf(code) !== -1;
+
+        box.textContent = recipient.accountName + (ok
+            ? ''
+            : ' cannot receive ' + code + '. They accept: ' + accepted.join(', ') + '.');
+        box.className = 'resolved' + (ok ? '' : ' bad');
+        box.hidden = false;
     }
 
     function tryResolve() {
@@ -616,6 +766,7 @@
         box.hidden = true;
 
         if (!isExternal()) {
+            lookupRecipient();
             return;
         }
 
@@ -667,6 +818,18 @@
             return;
         }
 
+        if (!isExternal() && sendCurrency() !== 'NGN') {
+            clear(box);
+
+            var free = el('div', 'total');
+
+            free.appendChild(el('span', null, 'Fee'));
+            free.appendChild(el('span', null, 'Free'));
+            box.appendChild(free);
+            box.hidden = false;
+            return;
+        }
+
         api('/transfers/quote', {
             method: 'POST',
             body: {
@@ -712,24 +875,27 @@
     }
 
     function describe(t) {
+        var cur = t.currency || 'NGN';
+
         var where = t.destinationBankName
             ? t.destinationBankName + ' ' + t.destinationAccountNumber
             : t.destinationAccountNumber;
 
         if (t.status === 'SUCCESSFUL') {
-            return 'Sent ' + money(t.amount) + ' to ' + where
-                + '. Charges ' + money(
-                    Number(t.fee) + Number(t.vat) + Number(t.stampDuty)
+            return 'Sent ' + moneyIn(t.amount, cur) + ' to ' + where
+                + '. Charges ' + moneyIn(
+                    Number(t.fee) + Number(t.vat) + Number(t.stampDuty),
+                    cur
                 )
                 + '. Reference ' + t.reference;
         }
 
         if (t.status === 'PENDING') {
-            return 'Sent ' + money(t.amount) + ' to ' + where
+            return 'Sent ' + moneyIn(t.amount, cur) + ' to ' + where
                 + '. Waiting for the bank to confirm. Reference ' + t.reference;
         }
 
-        return 'The transfer of ' + money(t.amount)
+        return 'The transfer of ' + moneyIn(t.amount, cur)
             + ' failed and your money was returned. Reference ' + t.reference;
     }
 
@@ -790,6 +956,9 @@
         if (current) {
             sel.value = current;
         }
+
+        /* Refresh the available currencies after restoring the account selection. */
+        fillSendCurrencies();
     }
 
     function onSend(event) {
@@ -814,6 +983,8 @@
             }
 
             body.bankCode = $('sendBank').value;
+        } else {
+            body.currency = sendCurrency();
         }
 
         button.disabled = true;
@@ -949,7 +1120,10 @@
                     'div',
                     'amount',
                     (outgoing ? '-' : '+')
-                    + money(outgoing ? t.totalDebit : t.amount)
+                    + moneyIn(
+                        outgoing ? t.totalDebit : t.amount,
+                        t.currency || 'NGN'
+                    )
                 );
 
                 btn.appendChild(main);
@@ -973,6 +1147,7 @@
         clear(box);
         box.appendChild(el('h2', null, 'Receipt'));
 
+        var currency = t.currency || 'NGN';
         var dl = el('dl');
 
         var rows = [
@@ -984,11 +1159,12 @@
                 ? t.destinationBankName + ' '
                 : '') + t.destinationAccountNumber],
             ['Recipient', t.destinationAccountName || '-'],
-            ['Amount', money(t.amount)],
-            ['Fee', money(t.fee)],
-            ['VAT on fee', money(t.vat)],
-            ['Stamp duty', money(t.stampDuty)],
-            ['Total debited', money(t.totalDebit)],
+            ['Currency', currency],
+            ['Amount', moneyIn(t.amount, currency)],
+            ['Fee', moneyIn(t.fee, currency)],
+            ['VAT on fee', moneyIn(t.vat, currency)],
+            ['Stamp duty', moneyIn(t.stampDuty, currency)],
+            ['Total debited', moneyIn(t.totalDebit, currency)],
             ['Narration', t.narration || '-']
         ];
 
@@ -1217,6 +1393,13 @@
         });
 
         $('sendBank').addEventListener('change', tryResolve);
+
+        /* Update the amount display and quote when the currency changes. */
+        $('sendCurrency').addEventListener('change', onCurrencyChange);
+
+        /* Refresh currency choices when the source account changes. */
+        $('sendFrom').addEventListener('change', fillSendCurrencies);
+
         $('sendTo').addEventListener('input', tryResolve);
         $('sendAmount').addEventListener('input', scheduleQuote);
         $('sendForm').addEventListener('submit', onSend);
