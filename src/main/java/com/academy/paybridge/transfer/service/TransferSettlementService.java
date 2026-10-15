@@ -36,6 +36,9 @@ import java.util.List;
 @Service
 public class TransferSettlementService {
 
+    /** Transfers are Naira only until Intent 002 (cross-border transfers). */
+    private static final String NGN = "NGN";
+
     private static final Logger log = LoggerFactory.getLogger(TransferSettlementService.class);
     private static final Duration RESEND_AFTER = Duration.ofMinutes(2);
 
@@ -66,8 +69,7 @@ public class TransferSettlementService {
     public void dispatch(String reference) {
         Transfer t = transfers.findByReference(reference).orElseThrow();
         try {
-            GatewayResult result = gateway.initiateTransfer(t.getReference(), t.getAmountKobo(),
-                    t.getRecipientCode(), t.getNarration());
+            GatewayResult result = gateway.initiateTransfer(t.getReference(), t.getAmountMinor(), t.getRecipientCode(), t.getNarration());
             audit.recordIndependently("system", "GATEWAY_CALLED", reference,
                     "status " + result.status() + (result.message() == null ? "" : ": " + cut(result.message())));
             apply(reference, result);
@@ -151,34 +153,28 @@ public class TransferSettlementService {
             accounts.lockInOrder(toLock);
 
             if (success) {
-                if (t.getFeeKobo() > 0) {
-                    accounts.credit(AccountApi.FEE_ACCOUNT, t.getFeeKobo());
-                }
-                if (t.getVatKobo() > 0) {
-                    accounts.credit(AccountApi.VAT_ACCOUNT, t.getVatKobo());
-                }
-                if (t.getStampDutyKobo() > 0) {
-                    accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, t.getStampDutyKobo());
-                }
-                ledger.recordPayoutSuccess(reference, t.getAmountKobo(), t.getFeeKobo(), t.getVatKobo(),
-                        t.getStampDutyKobo());
+                if (t.getFeeMinor() > 0)       { accounts.credit(AccountApi.FEE_ACCOUNT, NGN, t.getFeeMinor()); }
+                if (t.getVatMinor() > 0)       { accounts.credit(AccountApi.VAT_ACCOUNT, NGN, t.getVatMinor()); }
+                if (t.getStampDutyMinor() > 0) { accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, t.getStampDutyMinor()); }
+                ledger.recordPayoutSuccess(reference, t.getAmountMinor(), t.getFeeMinor(), t.getVatMinor(), t.getStampDutyMinor());
                 t.setStatus(TransferStatus.SUCCESSFUL);
                 t.setNote(null);
                 audit.record("paystack", "TRANSFER_SUCCESSFUL", reference, null);
             } else {
-                accounts.credit(t.getSourceAccountNumber(), t.getTotalDebitKobo());   // the refund, charges included
-                ledger.recordPayoutRefund(reference, t.getSourceAccountNumber(), t.getTotalDebitKobo());
+                accounts.credit(t.getSourceAccountNumber(), NGN, t.getTotalDebitMinor());   // the refund, charges included
+                ledger.recordPayoutRefund(reference, t.getSourceAccountNumber(), t.getTotalDebitMinor());
+
                 t.setStatus(TransferStatus.FAILED);
                 t.setNote(reason == null ? "Payout failed" : reason);
                 audit.record("system", "TRANSFER_FAILED_REFUNDED", reference,
-                        "refunded " + Money.format(t.getTotalDebitKobo()));
+                         "refunded " + Money.format(t.getTotalDebitMinor()));
             }
             t.setUpdatedAt(clock.instant());
             transfers.save(t);
             events.publishEvent(new TransferEvent(t.getReference(), t.getType(),
                     success ? TransferStage.SUCCEEDED : TransferStage.FAILED,
                     t.getSourceAccountNumber(), t.getDestinationAccountNumber(), t.getDestinationBankName(),
-                    t.getAmountKobo(), t.chargesKobo(), t.getTotalDebitKobo(), false));
+                    t.getAmountMinor(), t.chargesMinor(), t.getTotalDebitMinor(), false   ));// in the TransferEvent
         });
     }
 

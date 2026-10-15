@@ -21,7 +21,10 @@
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-modules.sh\"" },
-          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-money-types.sh\"" }
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-money-types.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-transactions.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-logging.sh\"" },
+          { "type": "command", "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-tests-offline.sh\"" }
         ]
       }
     ]
@@ -29,7 +32,8 @@
   "permissions": {
     "deny": [
       "Read(**/.env)",
-      "Read(**/.env.local)"
+      "Read(**/.env.local)",
+      "Read(**/.env.production)"
     ],
     "allow": [
       "Bash(mvn test*)",

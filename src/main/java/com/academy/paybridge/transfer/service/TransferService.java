@@ -54,6 +54,9 @@ import java.util.UUID;
 @Service
 public class TransferService {
 
+    /** Transfers are Naira only until Intent 002 (cross-border transfers). */
+    private static final String NGN = "NGN";
+
     private final TransferRepository transfers;
     private final AccountApi accounts;
     private final CustomerApi customers;
@@ -136,12 +139,11 @@ public class TransferService {
         boolean flagged = screen(customerId, source, destination, amountKobo, "");
 
         long total = amountKobo + charges.totalKobo();
-        accounts.debit(source, total);
-        accounts.credit(destination, amountKobo);
+        accounts.debit(source, NGN, total);
+        accounts.credit(destination, NGN, amountKobo);
         creditChargeAccounts(charges);
-
         Transfer t = new Transfer(newReference(), TransferType.INTERNAL, TransferStatus.SUCCESSFUL, source, destination,
-                amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
+                NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
                 clock.instant());
         transfers.save(t);
         ledger.recordInternal(t.getReference(), source, destination, amountKobo,
@@ -226,10 +228,10 @@ public class TransferService {
 
         Charges charges = chargeCalculator.calculate(amountKobo, TransferType.EXTERNAL);
         long total = amountKobo + charges.totalKobo();
-        accounts.debit(source, total);
+        accounts.debit(source, NGN, total);
 
         Transfer t = new Transfer(newReference(), TransferType.EXTERNAL, TransferStatus.PENDING, source,
-                destinationAccount, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(),
+                destinationAccount, NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(),
                 narration, key, hash, clock.instant());
         t.setBank(bank.code(), bank.name(), resolved.accountName(), recipientCode);
         t.setNote("Money reserved. Sending to the bank.");
@@ -350,13 +352,13 @@ public class TransferService {
 
     private void creditChargeAccounts(Charges c) {
         if (c.feeKobo() > 0) {
-            accounts.credit(AccountApi.FEE_ACCOUNT, c.feeKobo());
+            accounts.credit(AccountApi.FEE_ACCOUNT, NGN, c.feeKobo());
         }
         if (c.vatKobo() > 0) {
-            accounts.credit(AccountApi.VAT_ACCOUNT, c.vatKobo());
+            accounts.credit(AccountApi.VAT_ACCOUNT, NGN, c.vatKobo());
         }
         if (c.stampDutyKobo() > 0) {
-            accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, c.stampDutyKobo());
+            accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, c.stampDutyKobo());
         }
     }
 

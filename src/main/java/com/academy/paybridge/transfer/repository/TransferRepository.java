@@ -33,9 +33,10 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             TransferStatus status, TransferType type, Instant before);
 
     // ----- facts for the fraud rules -----
-
-    @Query("select coalesce(sum(t.amountKobo), 0L) from Transfer t "
-            + "where t.sourceAccountNumber = :n and t.createdAt >= :since and t.status <> :failed")
+// The fraud thresholds are in kobo, so these two sums count Naira rows only (plan 002-004 A1, R-DAT-3).
+    @Query("select coalesce(sum(t.amountMinor), 0L) from Transfer t "
+            + "where t.sourceAccountNumber = :n and t.currency = 'NGN' "
+            + "and t.createdAt >= :since and t.status <> :failed")
     long sumOutgoingSince(@Param("n") String account, @Param("since") Instant since,
                           @Param("failed") TransferStatus failed);
 
@@ -50,8 +51,11 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     long countPreviousTo(@Param("src") String source, @Param("dst") String destination,
                          @Param("bank") String bankCodeOrEmpty, @Param("failed") TransferStatus failed);
 
-    @Query("select coalesce(sum(t.amountKobo), 0L) from Transfer t "
-            + "where t.destinationAccountNumber = :n and t.type = :type and t.status = :ok and t.createdAt >= :since")
+    // ... countOutgoingSince and countPreviousTo are unchanged ...
+
+    @Query("select coalesce(sum(t.amountMinor), 0L) from Transfer t "
+            + "where t.destinationAccountNumber = :n and t.currency = 'NGN' "
+            + "and t.type = :type and t.status = :ok and t.createdAt >= :since")
     long sumIncomingSince(@Param("n") String account, @Param("type") TransferType type,
                           @Param("ok") TransferStatus ok, @Param("since") Instant since);
 }

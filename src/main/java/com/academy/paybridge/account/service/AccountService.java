@@ -114,7 +114,7 @@ public class AccountService implements AccountApi {
     @Transactional
     public AccountView devFund(String accountNumber, Long customerId, long kobo) {
         getOwned(accountNumber, customerId);
-        credit(accountNumber, kobo);
+        credit(accountNumber, "NGN", kobo);
         ledger.recordFunding(accountNumber, kobo);
         audit.record("customer:" + customerId, "DEV_FUNDING", null,
                 "account " + Money.maskAccount(accountNumber) + " +" + kobo + " kobo");
@@ -171,25 +171,6 @@ public class AccountService implements AccountApi {
             wallets.findNgnForUpdate(number)
                     .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
         }
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void debit(String accountNumber, long kobo) {
-        Wallet w = wallets.findNgnForUpdate(accountNumber)
-                .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
-        checkCanDebit(w, kobo);
-        w.setBalanceMinor(w.getBalanceMinor() - kobo);
-        wallets.save(w);
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void credit(String accountNumber, long kobo) {
-        Wallet w = wallets.findNgnForUpdate(accountNumber)
-                .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
-        w.setBalanceMinor(Math.addExact(w.getBalanceMinor(), kobo));
-        wallets.save(w);
     }
 
     @Override

@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "transfers")
@@ -51,20 +52,34 @@ public class Transfer {
     @Column(name = "recipient_code", updatable = false)
     private String recipientCode;
 
-    @Column(name = "amount_kobo", nullable = false, updatable = false)
-    private long amountKobo;
+    /** The currency of every amount below (the sender's wallet currency). Kobo rows from before V14 are NGN. */
+    @Column(nullable = false, updatable = false)
+    private String currency;
 
-    @Column(name = "fee_kobo", nullable = false, updatable = false)
-    private long feeKobo;
+    @Column(name = "amount_minor", nullable = false, updatable = false)
+    private long amountMinor;
 
-    @Column(name = "vat_kobo", nullable = false, updatable = false)
-    private long vatKobo;
+    @Column(name = "fee_minor", nullable = false, updatable = false)
+    private long feeMinor;
 
-    @Column(name = "stamp_duty_kobo", nullable = false, updatable = false)
-    private long stampDutyKobo;
+    @Column(name = "vat_minor", nullable = false, updatable = false)
+    private long vatMinor;
 
-    @Column(name = "total_debit_kobo", nullable = false, updatable = false)
-    private long totalDebitKobo;
+    @Column(name = "stamp_duty_minor", nullable = false, updatable = false)
+    private long stampDutyMinor;
+
+    @Column(name = "total_debit_minor", nullable = false, updatable = false)
+    private long totalDebitMinor;
+
+    // Filled only by cross-currency transfers (step A5). Empty for every transfer today.
+    @Column(name = "target_currency", updatable = false)
+    private String targetCurrency;
+
+    @Column(name = "target_amount_minor", updatable = false)
+    private Long targetAmountMinor;
+
+    @Column(name = "quote_id", updatable = false)
+    private UUID quoteId;
 
     @Column(updatable = false)
     private String narration;
@@ -93,18 +108,19 @@ public class Transfer {
     }
 
     public Transfer(String reference, TransferType type, TransferStatus status, String source, String destination,
-                    long amountKobo, long feeKobo, long vatKobo, long stampDutyKobo, String narration,
-                    String idempotencyKey, String requestHash, Instant now) {
+                    String currency, long amountMinor, long feeMinor, long vatMinor, long stampDutyMinor,
+                    String narration, String idempotencyKey, String requestHash, Instant now) {
         this.reference = reference;
         this.type = type;
         this.status = status;
         this.sourceAccountNumber = source;
         this.destinationAccountNumber = destination;
-        this.amountKobo = amountKobo;
-        this.feeKobo = feeKobo;
-        this.vatKobo = vatKobo;
-        this.stampDutyKobo = stampDutyKobo;
-        this.totalDebitKobo = amountKobo + feeKobo + vatKobo + stampDutyKobo;
+        this.currency = currency;
+        this.amountMinor = amountMinor;
+        this.feeMinor = feeMinor;
+        this.vatMinor = vatMinor;
+        this.stampDutyMinor = stampDutyMinor;
+        this.totalDebitMinor = amountMinor + feeMinor + vatMinor + stampDutyMinor;
         this.narration = narration;
         this.idempotencyKey = idempotencyKey;
         this.requestHash = requestHash;
@@ -120,8 +136,8 @@ public class Transfer {
         this.recipientCode = recipientCode;
     }
 
-    public long chargesKobo() {
-        return feeKobo + vatKobo + stampDutyKobo;
+    public long chargesMinor() {
+        return feeMinor + vatMinor + stampDutyMinor;
     }
 
     public Long getId() { return id; }
@@ -135,11 +151,15 @@ public class Transfer {
     public String getDestinationBankName() { return destinationBankName; }
     public String getDestinationAccountName() { return destinationAccountName; }
     public String getRecipientCode() { return recipientCode; }
-    public long getAmountKobo() { return amountKobo; }
-    public long getFeeKobo() { return feeKobo; }
-    public long getVatKobo() { return vatKobo; }
-    public long getStampDutyKobo() { return stampDutyKobo; }
-    public long getTotalDebitKobo() { return totalDebitKobo; }
+    public String getCurrency() { return currency; }
+    public long getAmountMinor() { return amountMinor; }
+    public long getFeeMinor() { return feeMinor; }
+    public long getVatMinor() { return vatMinor; }
+    public long getStampDutyMinor() { return stampDutyMinor; }
+    public long getTotalDebitMinor() { return totalDebitMinor; }
+    public String getTargetCurrency() { return targetCurrency; }
+    public Long getTargetAmountMinor() { return targetAmountMinor; }
+    public UUID getQuoteId() { return quoteId; }
     public String getNarration() { return narration; }
     public String getIdempotencyKey() { return idempotencyKey; }
     public String getRequestHash() { return requestHash; }

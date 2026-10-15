@@ -88,8 +88,8 @@ public final class TransferDtos {
             return new TransferResponse(t.getReference(), t.getType(), t.getStatus(),
                     t.getSourceAccountNumber(), t.getDestinationAccountNumber(),
                     t.getDestinationBankCode(), t.getDestinationBankName(), t.getDestinationAccountName(),
-                    Money.toNaira(t.getAmountKobo()), Money.toNaira(t.getFeeKobo()), Money.toNaira(t.getVatKobo()),
-                    Money.toNaira(t.getStampDutyKobo()), Money.toNaira(t.getTotalDebitKobo()),
+                    Money.toNaira(t.getAmountMinor()), Money.toNaira(t.getFeeMinor()), Money.toNaira(t.getVatMinor()),
+                    Money.toNaira(t.getStampDutyMinor()), Money.toNaira(t.getTotalDebitMinor()),
                     t.getNarration(), t.getNote(), t.getCreatedAt(), t.getUpdatedAt());
         }
     }
