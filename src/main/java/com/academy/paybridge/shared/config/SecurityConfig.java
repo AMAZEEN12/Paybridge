@@ -19,7 +19,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // the small web page
-                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/favicon.ico", "/error").permitAll()
+                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/convert.js", "/favicon.ico", "/error").permitAll()
                         // register, log in, and Paystack's webhook (protected by its own signature)
                         .requestMatchers("/api/v1/auth/**", "/api/v1/webhooks/paystack").permitAll()
                         // Swagger and the health check
