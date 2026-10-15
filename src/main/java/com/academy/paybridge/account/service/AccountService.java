@@ -241,6 +241,18 @@ public class AccountService implements AccountApi {
             }
         }
     }
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> receivableCurrencies(String accountNumber) {
+        Account account = accounts.findByAccountNumber(accountNumber)
+                .filter(a -> a.getType() == AccountType.CUSTOMER)
+                .orElseThrow(() -> ApiException.notFound("ACCOUNT_NOT_FOUND", "Account not found."));
+        return account.getWallets().stream()
+                .map(Wallet::getCurrency)
+                .filter(currency -> !currencies.isExcluded(currency))      // parked wallets can receive, so no status test
+                .sorted()
+                .toList();
+    }
 
     @Override
     @Transactional(readOnly = true)

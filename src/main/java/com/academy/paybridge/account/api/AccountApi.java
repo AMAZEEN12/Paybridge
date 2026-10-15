@@ -1,6 +1,7 @@
 package com.academy.paybridge.account.api;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -53,4 +54,11 @@ public interface AccountApi {
      * Read-only; used by the ledger reconciliation, which groups the keys by currency.
      */
     Map<String, Long> balances();
+
+    /**
+     * The currencies a customer account can receive (R-LKP-1): every wallet, active or parked, whose currency is not
+     * on the exclusion list, sorted by code. A frozen account is still listed, because only debits are refused.
+     * Throws ACCOUNT_NOT_FOUND (404) for an unknown number and for a system account. Read-only.
+     */
+    List<String> receivableCurrencies(String accountNumber);
 }
