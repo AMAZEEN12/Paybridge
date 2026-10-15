@@ -10,7 +10,9 @@
 <header class="top">
   <div class="brand">PayBridge</div>
   <nav class="who" id="who" hidden>
-    <button class="icon" id="bell" type="button" aria-label="Notifications">&#128276;<span class="badge" id="badge" hidden>0</span></button>
+    <button class="icon" id="bell" type="button" aria-label="Notifications">
+      &#128276;<span class="badge" id="badge" hidden>0</span>
+    </button>
     <span id="whoName"></span>
     <button class="link" id="logout" type="button">Log out</button>
   </nav>
@@ -25,17 +27,36 @@
       <button class="tab active" id="tabLogin" type="button" role="tab">Sign in</button>
       <button class="tab" id="tabRegister" type="button" role="tab">Create account</button>
     </div>
+
     <form id="loginForm" class="form">
-      <label>Email<input id="loginEmail" type="email" autocomplete="username" required></label>
-      <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <label>
+        Email
+        <input id="loginEmail" type="email" autocomplete="username" required>
+      </label>
+      <label>
+        Password
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+      </label>
       <button class="primary" type="submit">Sign in</button>
     </form>
+
     <form id="registerForm" class="form" hidden>
-      <label>Full name<input id="regName" type="text" autocomplete="name" required maxlength="120"></label>
-      <label>Email<input id="regEmail" type="email" autocomplete="email" required></label>
-      <label>Password <small>(8 characters or more)</small><input id="regPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
+      <label>
+        Full name
+        <input id="regName" type="text" autocomplete="name" required maxlength="120">
+      </label>
+      <label>
+        Email
+        <input id="regEmail" type="email" autocomplete="email" required>
+      </label>
+      <label>
+        Password <small>(8 characters or more)</small>
+        <input id="regPassword" type="password" autocomplete="new-password"
+               required minlength="8" maxlength="72">
+      </label>
       <button class="primary" type="submit">Create account</button>
     </form>
+
     <p class="hint">Demo app. Money here is test money.</p>
   </section>
 
@@ -54,20 +75,28 @@
         <h2>Set your transaction PIN</h2>
         <p class="hint">You need a 4-digit PIN to send money. It is separate from your password.</p>
         <form id="pinForm" class="form row">
-          <input id="pinNew" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" placeholder="4 digits" autocomplete="off" required>
+          <input id="pinNew" type="password" inputmode="numeric"
+                 pattern="\d{4}" maxlength="4" placeholder="4 digits"
+                 autocomplete="off" required>
           <button class="primary" type="submit">Save PIN</button>
         </form>
       </div>
+
       <div id="accountList" class="stack"></div>
 
       <div class="card" id="swapCard" hidden>
         <h2>Swap a wallet</h2>
-        <p class="hint">You can keep up to 4 active wallets. Your home wallet cannot be swapped. A parked wallet keeps its balance and can still receive money.</p>
+        <p class="hint">
+          You can keep up to 4 active wallets. Your home wallet cannot be swapped.
+          A parked wallet keeps its balance and can still receive money.
+        </p>
         <form id="swapForm" class="form">
-          <label>Activate this currency
+          <label>
+            Activate this currency
             <select id="swapCurrency"></select>
           </label>
-          <label id="swapParkLabel" hidden>Park this wallet to make room
+          <label id="swapParkLabel" hidden>
+            Park this wallet to make room
             <select id="swapPark"></select>
           </label>
           <button class="primary" type="submit">Swap</button>
@@ -77,63 +106,106 @@
 
     <div id="sendView" class="card" hidden>
       <h2>Send money</h2>
+
       <form id="sendForm" class="form">
-        <label>From
+        <label>
+          From
           <select id="sendFrom" required></select>
         </label>
+
         <div class="segmented" role="radiogroup" aria-label="Where to">
-          <label><input type="radio" name="kind" value="INTERNAL" checked> To a PayBridge account</label>
-          <label><input type="radio" name="kind" value="EXTERNAL"> To a bank</label>
+          <label>
+            <input type="radio" name="kind" value="INTERNAL" checked>
+            To a PayBridge account
+          </label>
+          <label>
+            <input type="radio" name="kind" value="EXTERNAL">
+            To a bank
+          </label>
         </div>
-        <label id="bankRow" hidden>Bank
-          <select id="sendBank"><option value="">Choose a bank</option></select>
+
+        <label id="bankRow" hidden>
+          Bank
+          <select id="sendBank">
+            <option value="">Choose a bank</option>
+          </select>
         </label>
-        <label>Account number
-          <input id="sendTo" type="text" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10 digits" required autocomplete="off">
+
+        <label>
+          Account number
+          <input id="sendTo" type="text" inputmode="numeric"
+                 pattern="\d{10}" maxlength="10" placeholder="10 digits"
+                 required autocomplete="off">
         </label>
+
         <p class="resolved" id="resolved" hidden></p>
-        <label>Amount (&#8358;)
-          <input id="sendAmount" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+
+        <label id="currencyRow">
+          Currency
+          <select id="sendCurrency" required></select>
         </label>
-        <label>Narration <small>(optional)</small>
+
+        <label>
+          Amount <span id="sendCcy">(&#8358;)</span>
+          <input id="sendAmount" type="number" min="0.01" step="0.01"
+                 inputmode="decimal" required>
+        </label>
+
+        <label>
+          Narration <small>(optional)</small>
           <input id="sendNarration" type="text" maxlength="140">
         </label>
+
         <div class="quote" id="quote" hidden></div>
-        <label>Transaction PIN
-          <input id="sendPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off" required>
+
+        <label>
+          Transaction PIN
+          <input id="sendPin" type="password" inputmode="numeric"
+                 pattern="\d{4}" maxlength="4" autocomplete="off" required>
         </label>
+
         <button class="primary" id="sendButton" type="submit">Send</button>
       </form>
+
       <div class="result" id="sendResult" hidden></div>
     </div>
 
     <div id="convertView" class="card" hidden>
       <h2>Convert money</h2>
       <p class="hint" id="convHint" hidden></p>
+
       <form id="convertForm" class="form">
-        <label>From
+        <label>
+          From
           <select id="convFrom" required></select>
         </label>
-        <label>To
+        <label>
+          To
           <select id="convTo" required></select>
         </label>
-        <label>Amount <span id="convCcy"></span>
-          <input id="convAmount" type="number" min="0" step="any" inputmode="decimal" required>
+        <label>
+          Amount <span id="convCcy"></span>
+          <input id="convAmount" type="number" min="0" step="any"
+                 inputmode="decimal" required>
         </label>
         <button class="primary" id="convQuoteButton" type="submit">Get quote</button>
       </form>
+
       <div class="quote" id="convQuote" hidden></div>
       <p class="hint" id="convCountdown" hidden></p>
+
       <div class="row" id="convActions" hidden>
         <button class="primary" id="convConfirm" type="button">Confirm conversion</button>
         <button id="convCancel" type="button">Cancel</button>
       </div>
+
       <div class="result" id="convResult" hidden></div>
     </div>
 
     <div id="historyView" class="card" hidden>
       <h2>History</h2>
-      <label>Account
+      <label>
+        Account
         <select id="historyAccount"></select>
       </label>
       <ul class="list" id="historyList"></ul>
@@ -141,7 +213,10 @@
     </div>
 
     <div id="alertsView" class="card" hidden>
-      <div class="row spread"><h2>Alerts</h2><button class="link" id="readAll" type="button">Mark all read</button></div>
+      <div class="row spread">
+        <h2>Alerts</h2>
+        <button class="link" id="readAll" type="button">Mark all read</button>
+      </div>
       <ul class="list" id="alertList"></ul>
     </div>
   </section>

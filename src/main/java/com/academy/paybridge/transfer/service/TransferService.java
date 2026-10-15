@@ -6,6 +6,7 @@ import com.academy.paybridge.compliance.api.FraudApi;
 import com.academy.paybridge.compliance.api.FraudContext;
 import com.academy.paybridge.compliance.api.FraudResult;
 import com.academy.paybridge.customer.api.CustomerApi;
+import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.config.AppProperties;
@@ -24,6 +25,7 @@ import com.academy.paybridge.transfer.gateway.GatewayUnavailableException;
 import com.academy.paybridge.transfer.gateway.ResolvedAccount;
 import com.academy.paybridge.transfer.gateway.TransferGateway;
 import com.academy.paybridge.transfer.repository.TransferRepository;
+import com.academy.paybridge.shared.money.CurrencyRegistry;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -40,22 +42,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Orchestrates the two kinds of transfer.
- *
- * INTERNAL (PayBridge account to PayBridge account) is all or nothing: one transaction.
- * EXTERNAL (payout to a bank through the gateway) cannot be one transaction, because the provider
- * is someone else's computer. So: resolve, reserve (debit and save PENDING, committed), call the provider
- * OUTSIDE any transaction, then settle to SUCCESSFUL or FAILED (with refund). See TransferSettlementService.
- *
- * This class itself is not @Transactional on purpose: it uses TransactionTemplate for the parts that must
- * be atomic, so the PIN check and the provider call can sit outside them.
- */
 @Service
 public class TransferService {
 
-    /** Transfers are Naira only until Intent 002 (cross-border transfers). */
     private static final String NGN = "NGN";
+
+    /**
+     * Same-currency transfers outside Naira carry no PayBridge charge or stamp duty.
+     */
+    private static final Charges NO_CHARGES = new Charges(0L, 0L, 0L);
 
     private final TransferRepository transfers;
     private final AccountApi accounts;
@@ -71,12 +66,25 @@ public class TransferService {
     private final Clock clock;
     private final ZoneId zone;
     private final LedgerApi ledger;
+    private final CurrencyRegistry currencies;
 
-    public TransferService(TransferRepository transfers, AccountApi accounts, CustomerApi customers, FraudApi fraud,
-                           ChargeCalculator chargeCalculator, TransferGateway gateway,
-                           BankDirectory banks, TransferSettlementService settlement, AuditService audit,
-                           ApplicationEventPublisher events, PlatformTransactionManager txManager, Clock clock,
-                           AppProperties appProps, LedgerApi ledger) {
+    public TransferService(
+            TransferRepository transfers,
+            AccountApi accounts,
+            CustomerApi customers,
+            FraudApi fraud,
+            ChargeCalculator chargeCalculator,
+            TransferGateway gateway,
+            BankDirectory banks,
+            TransferSettlementService settlement,
+            AuditService audit,
+            ApplicationEventPublisher events,
+            PlatformTransactionManager txManager,
+            Clock clock,
+            AppProperties appProps,
+            LedgerApi ledger,
+            CurrencyRegistry currencies) {
+
         this.transfers = transfers;
         this.accounts = accounts;
         this.customers = customers;
@@ -89,161 +97,406 @@ public class TransferService {
         this.events = events;
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
-        this.zone = ZoneId.of(appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
+        this.zone = ZoneId.of(
+                appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
         this.ledger = ledger;
+        this.currencies = currencies;
     }
 
     // =====================================================================================
     // INTERNAL TRANSFER
     // =====================================================================================
 
-    public TransferResult transferInternal(Long customerId, String source, String destination, long amountKobo,
-                                           String narration, String pin, String key) {
+    /**
+     * Same-currency transfer: the sender pays from their wallet in the selected currency,
+     * and the recipient receives the same amount in that currency.
+     */
+    public TransferResult transferInternal(
+            Long customerId,
+            String source,
+            String destination,
+            String currency,
+            long amountMinor,
+            String narration,
+            String pin,
+            String key) {
+
         String actor = "customer:" + customerId;
+
         if (source.equals(destination)) {
-            throw ApiException.unprocessable("SAME_ACCOUNT", "You cannot send money to the same account.");
+            throw ApiException.unprocessable(
+                    "SAME_ACCOUNT",
+                    "You cannot send money to the same account.");
         }
-        accounts.getOwned(source, customerId);                 // 404 if it is not yours
-        accounts.getCustomerAccount(destination);              // 404 if it does not exist (or is a system account)
-        String hash = RequestHasher.hash("INTERNAL", source, destination, null, amountKobo, narration);
+
+        accounts.getOwned(source, customerId);
+        accounts.getCustomerAccount(destination);
+        requireReceivable(destination, currency);
+
+        if (accounts.findWallet(source, currency).isEmpty()) {
+            throw ApiException.notFound(
+                    "WALLET_NOT_FOUND",
+                    "You do not have a " + currency + " wallet.");
+        }
+
+        String hash = RequestHasher.hash(
+                "INTERNAL",
+                source,
+                destination,
+                NGN.equals(currency) ? null : currency,
+                amountMinor,
+                narration);
 
         Optional<TransferResult> replay = replayIfSeen(source, key, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
-        customers.verifyPin(customerId, pin);                  // own transaction: wrong tries are counted
+
+        customers.verifyPin(customerId, pin);
 
         try {
-            return tx.execute(status -> doInternal(actor, customerId, source, destination, amountKobo, narration, key, hash));
+            return tx.execute(status -> doInternal(
+                    actor,
+                    customerId,
+                    source,
+                    destination,
+                    currency,
+                    amountMinor,
+                    narration,
+                    key,
+                    hash));
         } catch (ApiException e) {
-            if (!e.getCode().equals("TRANSFER_NOT_APPROVED") && !e.getCode().equals("IDEMPOTENCY_KEY_REUSED")) {
-                audit.recordIndependently(actor, "TRANSFER_REJECTED", null, e.getCode());
+            if (!e.getCode().equals("TRANSFER_NOT_APPROVED")
+                    && !e.getCode().equals("IDEMPOTENCY_KEY_REUSED")) {
+                audit.recordIndependently(
+                        actor, "TRANSFER_REJECTED", null, e.getCode());
             }
             throw e;
         }
     }
 
-    private TransferResult doInternal(String actor, Long customerId, String source, String destination, long amountKobo,
-                                      String narration, String key, String hash) {
-        Charges charges = chargeCalculator.calculate(amountKobo, TransferType.INTERNAL);
-        List<String> toLock = new ArrayList<>(List.of(source, destination));
-        addChargeAccounts(toLock, charges);
-        accounts.lockInOrder(toLock);            // everyone locks in the same order, so no deadlock
+    private TransferResult doInternal(
+            String actor,
+            Long customerId,
+            String source,
+            String destination,
+            String currency,
+            long amountMinor,
+            String narration,
+            String key,
+            String hash) {
 
-        // The source row is locked now, so a second request with the same key waits here and then sees the first one.
+        boolean naira = NGN.equals(currency);
+
+        Charges charges = naira
+                ? chargeCalculator.calculate(amountMinor, TransferType.INTERNAL)
+                : NO_CHARGES;
+
+        accounts.lockWalletsInOrder(List.of(source, destination), currency);
+
+        List<String> chargeAccounts = new ArrayList<>();
+        addChargeAccounts(chargeAccounts, charges);
+
+        if (!chargeAccounts.isEmpty()) {
+            accounts.lockInOrder(chargeAccounts);
+        }
+
         Optional<TransferResult> replay = replayIfSeen(source, key, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
 
-        boolean flagged = screen(customerId, source, destination, amountKobo, "");
+        boolean flagged = naira
+                && screen(customerId, source, destination, amountMinor, "");
 
-        long total = amountKobo + charges.totalKobo();
-        accounts.debit(source, NGN, total);
-        accounts.credit(destination, NGN, amountKobo);
+        long total = amountMinor + charges.totalKobo();
+
+        accounts.debit(source, currency, total);
+        accounts.credit(destination, currency, amountMinor);
         creditChargeAccounts(charges);
-        Transfer t = new Transfer(newReference(), TransferType.INTERNAL, TransferStatus.SUCCESSFUL, source, destination,
-                NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
+
+        Transfer t = new Transfer(
+                newReference(),
+                TransferType.INTERNAL,
+                TransferStatus.SUCCESSFUL,
+                source,
+                destination,
+                currency,
+                amountMinor,
+                charges.feeKobo(),
+                charges.vatKobo(),
+                charges.stampDutyKobo(),
+                narration,
+                key,
+                hash,
                 clock.instant());
+
         transfers.save(t);
-        ledger.recordInternal(t.getReference(), source, destination, amountKobo,
-                charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo());
-        audit.record(actor, "TRANSFER_COMPLETED", t.getReference(),
-                "internal " + Money.format(amountKobo) + " from " + Money.maskAccount(source)
+
+        if (naira) {
+            ledger.recordInternal(
+                    t.getReference(),
+                    source,
+                    destination,
+                    amountMinor,
+                    charges.feeKobo(),
+                    charges.vatKobo(),
+                    charges.stampDutyKobo());
+        } else {
+            ledger.recordJournal(
+                    "XFER:" + t.getReference(),
+                    t.getReference(),
+                    "TRANSFER",
+                    List.of(
+                            new JournalLine(
+                                    LedgerApi.walletKey(source, currency),
+                                    JournalLine.Side.DEBIT,
+                                    currency,
+                                    amountMinor),
+                            new JournalLine(
+                                    LedgerApi.walletKey(destination, currency),
+                                    JournalLine.Side.CREDIT,
+                                    currency,
+                                    amountMinor)));
+        }
+
+        audit.record(
+                actor,
+                "TRANSFER_COMPLETED",
+                t.getReference(),
+                "internal " + show(amountMinor, currency)
+                        + " from " + Money.maskAccount(source)
                         + " to " + Money.maskAccount(destination));
-        audit.record(actor, "CHARGES_APPLIED", t.getReference(),
-                "fee " + charges.feeKobo() + " vat " + charges.vatKobo() + " stamp " + charges.stampDutyKobo() + " kobo");
-        events.publishEvent(new TransferEvent(t.getReference(), TransferType.INTERNAL, TransferStage.COMPLETED,
-                source, destination, null, amountKobo, charges.totalKobo(), total, flagged));
+
+        if (naira) {
+            audit.record(
+                    actor,
+                    "CHARGES_APPLIED",
+                    t.getReference(),
+                    "fee " + charges.feeKobo()
+                            + " vat " + charges.vatKobo()
+                            + " stamp " + charges.stampDutyKobo()
+                            + " kobo");
+        }
+
+        events.publishEvent(new TransferEvent(
+                t.getReference(),
+                TransferType.INTERNAL,
+                TransferStage.COMPLETED,
+                source,
+                destination,
+                null,
+                currency,
+                amountMinor,
+                charges.totalKobo(),
+                total,
+                flagged));
+
         return new TransferResult(t, false);
     }
 
     // =====================================================================================
-    // EXTERNAL TRANSFER (payout to a bank)
+    // EXTERNAL TRANSFER
     // =====================================================================================
 
-    public TransferResult transferExternal(Long customerId, String source, String bankCode, String destinationAccount,
-                                           long amountKobo, String narration, String pin, String key) {
+    public TransferResult transferExternal(
+            Long customerId,
+            String source,
+            String bankCode,
+            String destinationAccount,
+            long amountKobo,
+            String narration,
+            String pin,
+            String key) {
+
         String actor = "customer:" + customerId;
+
         accounts.getOwned(source, customerId);
+
         Bank bank = banks.find(bankCode)
-                .orElseThrow(() -> ApiException.unprocessable("UNKNOWN_BANK", "That bank is not supported."));
-        String hash = RequestHasher.hash("EXTERNAL", source, destinationAccount, bankCode, amountKobo, narration);
+                .orElseThrow(() -> ApiException.unprocessable(
+                        "UNKNOWN_BANK",
+                        "That bank is not supported."));
+
+        String hash = RequestHasher.hash(
+                "EXTERNAL",
+                source,
+                destinationAccount,
+                bankCode,
+                amountKobo,
+                narration);
 
         Optional<TransferResult> replay = replayIfSeen(source, key, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
+
         customers.verifyPin(customerId, pin);
 
-        // Steps 1 and 2: check who we are paying. Nothing is debited yet, so any failure here costs nothing.
         ResolvedAccount resolved;
         String recipientCode;
+
         try {
             resolved = gateway.resolveAccount(destinationAccount, bankCode);
-            recipientCode = gateway.createRecipient(resolved.accountName(), destinationAccount, bankCode);
+            recipientCode = gateway.createRecipient(
+                    resolved.accountName(),
+                    destinationAccount,
+                    bankCode);
+
         } catch (com.academy.paybridge.transfer.gateway.LookupLimitReachedException e) {
-            throw ApiException.tooManyRequests("LOOKUP_LIMIT_REACHED", e.getMessage() + " Nothing was debited.");
+            throw ApiException.tooManyRequests(
+                    "LOOKUP_LIMIT_REACHED",
+                    e.getMessage() + " Nothing was debited.");
+
         } catch (GatewayRejectedException e) {
             org.slf4j.LoggerFactory.getLogger(TransferService.class).warn(
                     "Paystack refused account check/recipient for bank {} (HTTP {}): {}",
-                    bankCode, e.getHttpStatus(), e.getMessage());
-            throw ApiException.unprocessable("ACCOUNT_NOT_RESOLVED",
+                    bankCode,
+                    e.getHttpStatus(),
+                    e.getMessage());
+
+            throw ApiException.unprocessable(
+                    "ACCOUNT_NOT_RESOLVED",
                     "We could not find that bank account. Check the bank and account number.");
+
         } catch (GatewayUnavailableException e) {
-            throw new ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "PROVIDER_UNAVAILABLE",
+            throw new ApiException(
+                    org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+                    "PROVIDER_UNAVAILABLE",
                     "We could not reach the bank network. Nothing was debited. Please try again.");
         }
 
-        // Step 3: reserve. Debit and save PENDING in ONE short transaction, then commit.
         TransferResult reserved;
+
         try {
-            reserved = tx.execute(status -> reserve(actor, customerId, source, destinationAccount, bank, resolved,
-                    recipientCode, amountKobo, narration, key, hash));
+            reserved = tx.execute(status -> reserve(
+                    actor,
+                    customerId,
+                    source,
+                    destinationAccount,
+                    bank,
+                    resolved,
+                    recipientCode,
+                    amountKobo,
+                    narration,
+                    key,
+                    hash));
+
         } catch (ApiException e) {
-            if (!e.getCode().equals("TRANSFER_NOT_APPROVED") && !e.getCode().equals("IDEMPOTENCY_KEY_REUSED")) {
-                audit.recordIndependently(actor, "TRANSFER_REJECTED", null, e.getCode());
+            if (!e.getCode().equals("TRANSFER_NOT_APPROVED")
+                    && !e.getCode().equals("IDEMPOTENCY_KEY_REUSED")) {
+                audit.recordIndependently(
+                        actor, "TRANSFER_REJECTED", null, e.getCode());
             }
             throw e;
         }
+
         if (reserved.replayed()) {
             return reserved;
         }
 
-        // Step 4: call the provider with NO transaction open. The outcome is handled in the settlement service.
         String reference = reserved.transfer().getReference();
+
         settlement.dispatch(reference);
-        return new TransferResult(transfers.findByReference(reference).orElseThrow(), false);
+
+        return new TransferResult(
+                transfers.findByReference(reference).orElseThrow(),
+                false);
     }
 
-    private TransferResult reserve(String actor, Long customerId, String source, String destinationAccount, Bank bank,
-                                   ResolvedAccount resolved, String recipientCode, long amountKobo, String narration,
-                                   String key, String hash) {
+    private TransferResult reserve(
+            String actor,
+            Long customerId,
+            String source,
+            String destinationAccount,
+            Bank bank,
+            ResolvedAccount resolved,
+            String recipientCode,
+            long amountKobo,
+            String narration,
+            String key,
+            String hash) {
+
         accounts.lockInOrder(List.of(source));
+
         Optional<TransferResult> replay = replayIfSeen(source, key, hash);
         if (replay.isPresent()) {
             return replay.get();
         }
-        boolean flagged = screen(customerId, source, destinationAccount, amountKobo, bank.code());
 
-        Charges charges = chargeCalculator.calculate(amountKobo, TransferType.EXTERNAL);
+        boolean flagged = screen(
+                customerId,
+                source,
+                destinationAccount,
+                amountKobo,
+                bank.code());
+
+        Charges charges = chargeCalculator.calculate(
+                amountKobo, TransferType.EXTERNAL);
+
         long total = amountKobo + charges.totalKobo();
+
         accounts.debit(source, NGN, total);
 
-        Transfer t = new Transfer(newReference(), TransferType.EXTERNAL, TransferStatus.PENDING, source,
-                destinationAccount, NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(),
-                narration, key, hash, clock.instant());
-        t.setBank(bank.code(), bank.name(), resolved.accountName(), recipientCode);
+        Transfer t = new Transfer(
+                newReference(),
+                TransferType.EXTERNAL,
+                TransferStatus.PENDING,
+                source,
+                destinationAccount,
+                NGN,
+                amountKobo,
+                charges.feeKobo(),
+                charges.vatKobo(),
+                charges.stampDutyKobo(),
+                narration,
+                key,
+                hash,
+                clock.instant());
+
+        t.setBank(
+                bank.code(),
+                bank.name(),
+                resolved.accountName(),
+                recipientCode);
+
         t.setNote("Money reserved. Sending to the bank.");
+
         transfers.save(t);
+
         ledger.recordReserve(t.getReference(), source, total);
-        audit.record(actor, "TRANSFER_RESERVED", t.getReference(),
-                "payout " + Money.format(amountKobo) + " from " + Money.maskAccount(source) + " to "
-                        + bank.name() + " " + Money.maskAccount(destinationAccount));
-        audit.record(actor, "CHARGES_APPLIED", t.getReference(),
-                "fee " + charges.feeKobo() + " vat " + charges.vatKobo() + " stamp " + charges.stampDutyKobo() + " kobo");
-        events.publishEvent(new TransferEvent(t.getReference(), TransferType.EXTERNAL, TransferStage.ACCEPTED, source,
-                destinationAccount, bank.name(), amountKobo, charges.totalKobo(), total, flagged));
+
+        audit.record(
+                actor,
+                "TRANSFER_RESERVED",
+                t.getReference(),
+                "payout " + Money.format(amountKobo)
+                        + " from " + Money.maskAccount(source)
+                        + " to " + bank.name()
+                        + " " + Money.maskAccount(destinationAccount));
+
+        audit.record(
+                actor,
+                "CHARGES_APPLIED",
+                t.getReference(),
+                "fee " + charges.feeKobo()
+                        + " vat " + charges.vatKobo()
+                        + " stamp " + charges.stampDutyKobo()
+                        + " kobo");
+
+        events.publishEvent(new TransferEvent(
+                t.getReference(),
+                TransferType.EXTERNAL,
+                TransferStage.ACCEPTED,
+                source,
+                destinationAccount,
+                bank.name(),
+                NGN,
+                amountKobo,
+                charges.totalKobo(),
+                total,
+                flagged));
+
         return new TransferResult(t, false);
     }
 
@@ -251,32 +504,60 @@ public class TransferService {
     // READING, VERIFYING, QUOTING
     // =====================================================================================
 
-    /** Asks the provider about a pending payout. Only the owner of the source account may do this. */
     public Transfer verify(Long customerId, String reference) {
         Transfer t = getVisible(customerId, reference);
-        if (t.getType() == TransferType.EXTERNAL && t.getStatus() == TransferStatus.PENDING) {
+
+        if (t.getType() == TransferType.EXTERNAL
+                && t.getStatus() == TransferStatus.PENDING) {
             return settlement.settleFromGateway(reference);
         }
+
         return t;
     }
 
-    /** The sender can always see a transfer. The receiver of an internal transfer can see it too. Everyone else gets 404. */
     public Transfer getVisible(Long customerId, String reference) {
         Transfer t = transfers.findByReference(reference)
-                .orElseThrow(() -> ApiException.notFound("TRANSFER_NOT_FOUND", "Transfer not found."));
-        boolean sender = accounts.ownerOf(t.getSourceAccountNumber()).filter(customerId::equals).isPresent();
+                .orElseThrow(() -> ApiException.notFound(
+                        "TRANSFER_NOT_FOUND",
+                        "Transfer not found."));
+
+        boolean sender = accounts.ownerOf(t.getSourceAccountNumber())
+                .filter(customerId::equals)
+                .isPresent();
+
         boolean receiver = t.getType() == TransferType.INTERNAL
-                && accounts.ownerOf(t.getDestinationAccountNumber()).filter(customerId::equals).isPresent();
+                && accounts.ownerOf(t.getDestinationAccountNumber())
+                .filter(customerId::equals)
+                .isPresent();
+
         if (!sender && !receiver) {
-            audit.recordIndependently("customer:" + customerId, "ACCESS_DENIED_OWNERSHIP", reference, "transfer");
-            throw ApiException.notFound("TRANSFER_NOT_FOUND", "Transfer not found.");
+            audit.recordIndependently(
+                    "customer:" + customerId,
+                    "ACCESS_DENIED_OWNERSHIP",
+                    reference,
+                    "transfer");
+
+            throw ApiException.notFound(
+                    "TRANSFER_NOT_FOUND",
+                    "Transfer not found.");
         }
+
         return t;
     }
 
-    public Page<Transfer> history(Long customerId, String accountNumber, int page, int size) {
+    public Page<Transfer> history(
+            Long customerId,
+            String accountNumber,
+            int page,
+            int size) {
+
         accounts.getOwned(accountNumber, customerId);
-        return transfers.history(accountNumber, PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)));
+
+        return transfers.history(
+                accountNumber,
+                PageRequest.of(
+                        Math.max(page, 0),
+                        Math.min(Math.max(size, 1), 100)));
     }
 
     public Charges quote(long amountKobo, TransferType type) {
@@ -287,83 +568,146 @@ public class TransferService {
     // HELPERS
     // =====================================================================================
 
-    /**
-     * Idempotency. Same key + same request = return the stored transfer. Same key + different request = refuse.
-     * The key belongs to the SOURCE account, so one customer can never replay another customer's transfer.
-     */
-    private Optional<TransferResult> replayIfSeen(String source, String key, String hash) {
-        Optional<Transfer> existing = transfers.findBySourceAccountNumberAndIdempotencyKey(source, key);
+    private Optional<TransferResult> replayIfSeen(
+            String source,
+            String key,
+            String hash) {
+
+        Optional<Transfer> existing =
+                transfers.findBySourceAccountNumberAndIdempotencyKey(source, key);
+
         if (existing.isEmpty()) {
             return Optional.empty();
         }
+
         if (!existing.get().getRequestHash().equals(hash)) {
-            throw ApiException.unprocessable("IDEMPOTENCY_KEY_REUSED",
+            throw ApiException.unprocessable(
+                    "IDEMPOTENCY_KEY_REUSED",
                     "This Idempotency-Key was already used for a different request. Use a new key.");
         }
+
         return Optional.of(new TransferResult(existing.get(), true));
     }
 
-    /**
-     * Runs the fraud rules. BLOCK refuses the transfer (the real reasons go to the audit log only).
-     * FLAG lets it through and returns true so the owner is warned.
-     */
-    private boolean screen(Long customerId, String source, String destinationAccount, long amountKobo, String bankCode) {
+    private boolean screen(
+            Long customerId,
+            String source,
+            String destinationAccount,
+            long amountKobo,
+            String bankCode) {
+
         Instant now = clock.instant();
-        Instant startOfDay = clock.instant().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant();
+
+        Instant startOfDay = clock.instant()
+                .atZone(zone)
+                .toLocalDate()
+                .atStartOfDay(zone)
+                .toInstant();
+
         FraudContext ctx = new FraudContext(
-                customerId, source,
-                bankCode.isEmpty() ? destinationAccount : bankCode + ":" + destinationAccount,
+                customerId,
+                source,
+                bankCode.isEmpty()
+                        ? destinationAccount
+                        : bankCode + ":" + destinationAccount,
                 amountKobo,
-                transfers.sumOutgoingSince(source, startOfDay, TransferStatus.FAILED),
-                (int) transfers.countOutgoingSince(source,
-                        now.minus(fraud.velocityWindowMinutes(), ChronoUnit.MINUTES), TransferStatus.FAILED),
-                transfers.countPreviousTo(source, destinationAccount, bankCode, TransferStatus.FAILED) == 0,
-                transfers.sumIncomingSince(source, TransferType.INTERNAL, TransferStatus.SUCCESSFUL,
+                transfers.sumOutgoingSince(
+                        source, startOfDay, TransferStatus.FAILED),
+                (int) transfers.countOutgoingSince(
+                        source,
+                        now.minus(fraud.velocityWindowMinutes(), ChronoUnit.MINUTES),
+                        TransferStatus.FAILED),
+                transfers.countPreviousTo(
+                        source,
+                        destinationAccount,
+                        bankCode,
+                        TransferStatus.FAILED) == 0,
+                transfers.sumIncomingSince(
+                        source,
+                        TransferType.INTERNAL,
+                        TransferStatus.SUCCESSFUL,
                         now.minus(fraud.passThroughWindowMinutes(), ChronoUnit.MINUTES)));
+
         FraudResult result = fraud.evaluate(ctx);
+
         String actor = "customer:" + customerId;
+
         if (result.decision() == Decision.BLOCK) {
             fraud.record(null, source, result);
-            audit.recordIndependently(actor, "FRAUD_BLOCKED", null,
+
+            audit.recordIndependently(
+                    actor,
+                    "FRAUD_BLOCKED",
+                    null,
                     Money.maskAccount(source) + ": " + result.joinedReasons());
-            // Generic on purpose: do not teach an attacker which limit to stay under.
-            throw ApiException.forbidden("TRANSFER_NOT_APPROVED", "This transfer was not approved. Contact support.");
+
+            throw ApiException.forbidden(
+                    "TRANSFER_NOT_APPROVED",
+                    "This transfer was not approved. Contact support.");
         }
+
         if (result.decision() == Decision.FLAG) {
             fraud.record(null, source, result);
-            audit.recordIndependently(actor, "FRAUD_FLAGGED", null,
+
+            audit.recordIndependently(
+                    actor,
+                    "FRAUD_FLAGGED",
+                    null,
                     Money.maskAccount(source) + ": " + result.joinedReasons());
+
             return true;
         }
+
         return false;
     }
 
-    private static void addChargeAccounts(List<String> toLock, Charges c) {
-        if (c.feeKobo() > 0) {
+
+
+
+
+    private static void addChargeAccounts(List<String> toLock, Charges charges) {
+        if (charges.feeKobo() > 0) {
             toLock.add(AccountApi.FEE_ACCOUNT);
         }
-        if (c.vatKobo() > 0) {
+
+        if (charges.vatKobo() > 0) {
             toLock.add(AccountApi.VAT_ACCOUNT);
         }
-        if (c.stampDutyKobo() > 0) {
+
+        if (charges.stampDutyKobo() > 0) {
             toLock.add(AccountApi.STAMP_DUTY_ACCOUNT);
         }
     }
 
-    private void creditChargeAccounts(Charges c) {
-        if (c.feeKobo() > 0) {
-            accounts.credit(AccountApi.FEE_ACCOUNT, NGN, c.feeKobo());
+    private void creditChargeAccounts(Charges charges) {
+        if (charges.feeKobo() > 0) {
+            accounts.credit(AccountApi.FEE_ACCOUNT, NGN, charges.feeKobo());
         }
-        if (c.vatKobo() > 0) {
-            accounts.credit(AccountApi.VAT_ACCOUNT, NGN, c.vatKobo());
+
+        if (charges.vatKobo() > 0) {
+            accounts.credit(AccountApi.VAT_ACCOUNT, NGN, charges.vatKobo());
         }
-        if (c.stampDutyKobo() > 0) {
-            accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, c.stampDutyKobo());
+
+        if (charges.stampDutyKobo() > 0) {
+            accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, charges.stampDutyKobo());
         }
     }
 
-    /** Our own reference: trf_ plus 32 hex characters (36 in total, within Paystack's 16 to 50 lowercase rule). */
     private static String newReference() {
         return "trf_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /** Naira keeps its exact old wording; other currencies use their own symbol and decimals. */
+    private String show(long minor, String currency) {
+        return NGN.equals(currency) ? Money.format(minor) : currencies.format(minor, currency);
+    }
+
+    /** R-XFR-2: the recipient needs a wallet in the currency (active or parked); the message names what they accept. */
+    private void requireReceivable(String destination, String currency) {
+        List<String> accepted = accounts.receivableCurrencies(destination);
+        if (!accepted.contains(currency)) {
+            throw ApiException.unprocessable("RECIPIENT_CANNOT_RECEIVE",
+                    "That account cannot receive " + currency + ". It accepts: " + String.join(", ", accepted) + ".");
+        }
     }
 }

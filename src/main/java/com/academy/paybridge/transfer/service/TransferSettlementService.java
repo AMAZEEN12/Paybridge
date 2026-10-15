@@ -174,7 +174,7 @@ public class TransferSettlementService {
             events.publishEvent(new TransferEvent(t.getReference(), t.getType(),
                     success ? TransferStage.SUCCEEDED : TransferStage.FAILED,
                     t.getSourceAccountNumber(), t.getDestinationAccountNumber(), t.getDestinationBankName(),
-                    t.getAmountMinor(), t.chargesMinor(), t.getTotalDebitMinor(), false   ));// in the TransferEvent
+                    t.getCurrency(), t.getAmountMinor(), t.chargesMinor(), t.getTotalDebitMinor(), false));// in the TransferEvent
         });
     }
 
