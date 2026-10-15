@@ -142,9 +142,8 @@ public class TransferService {
         accounts.debit(source, NGN, total);
         accounts.credit(destination, NGN, amountKobo);
         creditChargeAccounts(charges);
-
         Transfer t = new Transfer(newReference(), TransferType.INTERNAL, TransferStatus.SUCCESSFUL, source, destination,
-                amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
+                NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(), narration, key, hash,
                 clock.instant());
         transfers.save(t);
         ledger.recordInternal(t.getReference(), source, destination, amountKobo,
@@ -232,7 +231,7 @@ public class TransferService {
         accounts.debit(source, NGN, total);
 
         Transfer t = new Transfer(newReference(), TransferType.EXTERNAL, TransferStatus.PENDING, source,
-                destinationAccount, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(),
+                destinationAccount, NGN, amountKobo, charges.feeKobo(), charges.vatKobo(), charges.stampDutyKobo(),
                 narration, key, hash, clock.instant());
         t.setBank(bank.code(), bank.name(), resolved.accountName(), recipientCode);
         t.setNote("Money reserved. Sending to the bank.");
