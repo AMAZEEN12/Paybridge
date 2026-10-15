@@ -36,6 +36,9 @@ import java.util.List;
 @Service
 public class TransferSettlementService {
 
+    /** Transfers are Naira only until Intent 002 (cross-border transfers). */
+    private static final String NGN = "NGN";
+
     private static final Logger log = LoggerFactory.getLogger(TransferSettlementService.class);
     private static final Duration RESEND_AFTER = Duration.ofMinutes(2);
 
@@ -152,13 +155,13 @@ public class TransferSettlementService {
 
             if (success) {
                 if (t.getFeeKobo() > 0) {
-                    accounts.credit(AccountApi.FEE_ACCOUNT, t.getFeeKobo());
+                    accounts.credit(AccountApi.FEE_ACCOUNT, NGN, t.getFeeKobo());
                 }
                 if (t.getVatKobo() > 0) {
-                    accounts.credit(AccountApi.VAT_ACCOUNT, t.getVatKobo());
+                    accounts.credit(AccountApi.VAT_ACCOUNT, NGN, t.getVatKobo());
                 }
                 if (t.getStampDutyKobo() > 0) {
-                    accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, t.getStampDutyKobo());
+                    accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, t.getStampDutyKobo());
                 }
                 ledger.recordPayoutSuccess(reference, t.getAmountKobo(), t.getFeeKobo(), t.getVatKobo(),
                         t.getStampDutyKobo());
@@ -166,7 +169,7 @@ public class TransferSettlementService {
                 t.setNote(null);
                 audit.record("paystack", "TRANSFER_SUCCESSFUL", reference, null);
             } else {
-                accounts.credit(t.getSourceAccountNumber(), t.getTotalDebitKobo());   // the refund, charges included
+                accounts.credit(t.getSourceAccountNumber(), NGN, t.getTotalDebitKobo());   // the refund, charges included
                 ledger.recordPayoutRefund(reference, t.getSourceAccountNumber(), t.getTotalDebitKobo());
                 t.setStatus(TransferStatus.FAILED);
                 t.setNote(reason == null ? "Payout failed" : reason);

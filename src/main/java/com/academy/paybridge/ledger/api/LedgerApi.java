@@ -7,6 +7,10 @@ import java.util.List;
  *
  * Every method joins the caller's database transaction (it refuses to run without one), so the balance change
  * and its ledger lines are saved together or not at all.
+ *
+ * The kobo methods (recordFunding, recordInternal, recordReserve, recordPayoutSuccess, recordPayoutRefund) are the
+ * Naira transfer postings. They stay until Intent 002 (cross-border transfers) makes transfers currency-aware.
+ * New work uses recordJournal or recordConversion.
  */
 public interface LedgerApi {
 

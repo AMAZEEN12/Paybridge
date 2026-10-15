@@ -28,12 +28,6 @@ public interface AccountApi {
 
     void lockInOrder(Collection<String> accountNumbers);
 
-    /** Naira wallet only (the older shim). Refused for a frozen account and for a parked NGN wallet. */
-    void debit(String accountNumber, long kobo);
-
-    /** Naira wallet only (the older shim). */
-    void credit(String accountNumber, long kobo);
-
     /**
      * Takes money from one wallet. Refused for a frozen account and for a PARKED wallet (R-WAL-6, R-WAL-8).
      * Needs a transaction.
