@@ -2,6 +2,7 @@ package com.academy.paybridge.remittance.repository;
 
 import com.academy.paybridge.remittance.domain.Remittance;
 import com.academy.paybridge.remittance.domain.RemittanceStatus;
+import com.academy.paybridge.shared.api.DayItem;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,4 +35,10 @@ public interface RemittanceRepository extends JpaRepository<Remittance, Long> {
     @Query("SELECT r FROM Remittance r WHERE r.status IN :statuses AND r.updatedAt < :before ORDER BY r.updatedAt")
     List<Remittance> findStale(@Param("statuses") Collection<RemittanceStatus> statuses,
                                @Param("before") Instant before, Pageable pageable);
+
+    /** Payouts created in [from, to) for the settlement batch (kind PAYOUT, in the payout currency). */
+    @Query("SELECT new com.academy.paybridge.shared.api.DayItem(r.reference, 'PAYOUT', r.payoutCurrency, " +
+            "r.payoutAmountMinor, CAST(r.status AS string)) FROM Remittance r " +
+            "WHERE r.createdAt >= :from AND r.createdAt < :to ORDER BY r.createdAt, r.id")
+    List<DayItem> dayItems(@Param("from") Instant from, @Param("to") Instant to);
 }

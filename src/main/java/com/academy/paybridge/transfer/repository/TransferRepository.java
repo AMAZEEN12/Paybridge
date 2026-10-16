@@ -1,5 +1,6 @@
 package com.academy.paybridge.transfer.repository;
 
+import com.academy.paybridge.shared.api.DayItem;
 import com.academy.paybridge.transfer.api.TransferStatus;
 import com.academy.paybridge.transfer.api.TransferType;
 import com.academy.paybridge.transfer.domain.Transfer;
@@ -67,4 +68,11 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             + "where t.sourceAccountNumber = :n and t.createdAt >= :since and t.status <> :failed")
     long sumUsdSince(@Param("n") String account, @Param("since") Instant since,
                      @Param("failed") TransferStatus failed);
+
+    /** Internal transfers created in [from, to) for the settlement batch. */
+    @Query("SELECT new com.academy.paybridge.shared.api.DayItem(t.reference, 'TRANSFER', t.currency, " +
+            "t.amountMinor, CAST(t.status AS string)) FROM Transfer t " +
+            "WHERE t.type = com.academy.paybridge.transfer.api.TransferType.INTERNAL " +
+            "AND t.createdAt >= :from AND t.createdAt < :to ORDER BY t.createdAt, t.id")
+    List<DayItem> internalDayItems(@Param("from") Instant from, @Param("to") Instant to);
 }

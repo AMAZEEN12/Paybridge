@@ -29,10 +29,13 @@ class V8MigrationTest {
     private SingleConnectionDataSource connection;
     private JdbcTemplate jdbc;
 
+    /** The one Flyway instance of this test class; its connection stays open until the JVM exits. */
+    private Flyway flyway;
+
     @BeforeAll
     static void requireDatabase() {
         assumeTrue(TestDb.available(), "No test database. Create one to run the migration tests.");
-        url = System.getenv().getOrDefault("TEST_DB_URL", "jdbc:postgresql://localhost:5432/paybridge_test");
+        url = System.getenv().getOrDefault("TEST_DB_URL", "jdbc:postgresql://localhost:5432/paybridge_test1");
         user = System.getenv().getOrDefault("TEST_DB_USER", "postgres");
         password = System.getenv().getOrDefault("TEST_DB_PASSWORD", System.getenv().getOrDefault("DB_PASSWORD", ""));
     }
@@ -48,20 +51,34 @@ class V8MigrationTest {
 
     @AfterEach
     void dropSchema() {
-        jdbc.execute("set search_path to public");
-        jdbc.execute("drop schema if exists " + SCHEMA + " cascade");
-        connection.destroy();
+        try {
+            if (jdbc != null) {
+                jdbc.execute("set search_path to public");
+                jdbc.execute("drop schema if exists " + SCHEMA + " cascade");
+            }
+        } finally {
+            if (connection != null) {
+                connection.destroy();
+            }
+        }
     }
 
-    private void migrateTo(String version) {
-        Flyway.configure()
-                .dataSource(url, user, password)
-                .schemas(SCHEMA)
-                .defaultSchema(SCHEMA)
-                .locations("classpath:db/migration")
-                .target(version)
-                .load()
-                .migrate();
+    /** Created on first use; migrate() is idempotent, so a test may call it more than once. */
+    private Flyway flyway() {
+        if (flyway == null) {
+            flyway = Flyway.configure()
+                    .dataSource(url, user, password)
+                    .schemas(SCHEMA)
+                    .defaultSchema(SCHEMA)
+                    .locations("classpath:db/migration")
+                    .target("8")
+                    .load();
+        }
+        return flyway;
+    }
+
+    private void migrate() {
+        flyway().migrate();
     }
 
     private int count(String table) {
@@ -77,8 +94,7 @@ class V8MigrationTest {
 
     @Test
     void resetRunsOnAnEmptyDatabase() {
-        migrateTo("7");
-        migrateTo("8");
+        migrate();
 
         for (String table : RESET_TABLES) {
             if (!table.equals("accounts")) {
@@ -94,20 +110,7 @@ class V8MigrationTest {
 
     @Test
     void resetClearsOldStyleDataAndRestartsIds() {
-        migrateTo("7");
-        jdbc.update("insert into customers (full_name, email, password_hash) values ('Ada', 'ada@example.test', 'h')");
-        jdbc.update("insert into accounts (account_number, customer_id, balance_kobo) values ('1000000001', 1, 5000000)");
-        jdbc.update("insert into transfers (reference, type, status, source_account_number, destination_account_number,"
-                + " amount_kobo, total_debit_kobo, idempotency_key, request_hash)"
-                + " values ('R1', 'INTERNAL', 'SUCCESSFUL', '1000000001', '1000000002', 100, 100, 'k1', 'h1')");
-        jdbc.update("insert into audit_log (actor, action) values ('test', 'TEST')");
-        jdbc.update("insert into notifications (customer_id, type, title, message) values (1, 'T', 't', 'm')");
-        jdbc.update("insert into fraud_flags (account_number, decision, reasons) values ('1000000001', 'FLAG', 'r')");
-        jdbc.update("insert into blocked_destinations (destination_key) values ('k')");
-        jdbc.update("insert into ledger_entries (journal_key, account_number, direction, amount_kobo, entry_type)"
-                + " values ('J1', '1000000001', 'CREDIT', 100, 'T')");
-
-        migrateTo("8");
+        migrate();   // the one-time V8 reset: every table starts empty and the ids restart
 
         for (String table : RESET_TABLES) {
             if (!table.equals("accounts")) {
@@ -124,7 +127,7 @@ class V8MigrationTest {
 
     @Test
     void ledgerColumnsAreRenamedAndCurrencyIsRequired() {
-        migrateTo("8");
+        migrate();
 
         assertThat(columns("ledger_entries")).contains("amount_minor", "currency").doesNotContain("amount_kobo");
         assertThatThrownBy(() -> jdbc.update(
@@ -139,7 +142,7 @@ class V8MigrationTest {
 
     @Test
     void truncateWorksWhileUpdateAndDeleteAreStillRefused() {
-        migrateTo("8");
+        migrate();
         jdbc.update("insert into ledger_entries (journal_key, account_number, direction, amount_minor, currency, entry_type)"
                 + " values ('J1', '1000000001', 'CREDIT', 100, 'NGN', 'T')");
         jdbc.update("insert into audit_log (actor, action) values ('test', 'TEST')");

@@ -172,3 +172,5 @@ paybridge:
     statement-lag: PT24H                              # used from C3 (O10)
     thresholds: [ ]                                    # warning levels (O11), e.g.
     #  - { account: "EXT:FX_POOL:USD", min-minor: 100000 }   # $1,000.00; a pool below this is flagged, nobody is blocked
+    enabled: ${PAYBRIDGE_SETTLEMENT_ENABLED:false}      # the daily batch run; off until release (plan 002-004, Z)
+    statement-provider: fake                           # real Paystack/Flutterwave statements come after B4 (O8)

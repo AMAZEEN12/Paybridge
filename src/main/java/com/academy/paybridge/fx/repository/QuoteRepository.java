@@ -1,6 +1,7 @@
 package com.academy.paybridge.fx.repository;
 
 import com.academy.paybridge.fx.domain.Quote;
+import com.academy.paybridge.shared.api.DayItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -8,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public interface QuoteRepository extends JpaRepository<Quote, UUID> {
@@ -110,4 +112,12 @@ public interface QuoteRepository extends JpaRepository<Quote, UUID> {
             "AND q.type <> com.academy.paybridge.fx.domain.QuoteType.PAYOUT " +
             "AND q.expiresAt < :stuckBefore")
     int failStuck(@Param("stuckBefore") Instant stuckBefore, @Param("reason") String reason);
+
+    /** Completed conversions in [from, to) for the settlement batch (source currency and amount). */
+    @Query("SELECT new com.academy.paybridge.shared.api.DayItem(CAST(q.id AS string), 'CONVERSION', q.sourceCurrency, " +
+            "q.sourceAmountMinor, CAST(q.status AS string)) FROM Quote q " +
+            "WHERE q.type = com.academy.paybridge.fx.domain.QuoteType.CONVERSION " +
+            "AND q.status = com.academy.paybridge.fx.domain.QuoteStatus.COMPLETED " +
+            "AND q.completedAt >= :from AND q.completedAt < :to ORDER BY q.completedAt")
+    List<DayItem> conversionDayItems(@Param("from") Instant from, @Param("to") Instant to);
 }
