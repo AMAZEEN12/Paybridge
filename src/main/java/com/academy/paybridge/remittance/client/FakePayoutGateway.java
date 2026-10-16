@@ -109,7 +109,7 @@ public class FakePayoutGateway implements PayoutGateway {
         if (account.startsWith("77")) {
             throw new PayoutRejectedException("The partner rejected the payout.");
         }
-        processed.put(r.reference(), outcomeFor(account, r.quotedSourceNetMinor()));
+        processed.put(r.reference(), outcomeFor(account, r.quotedSourceNetMinor(), r.reference()));
         if (account.startsWith("88")) {
             throw new PayoutUnavailableException("Timed out waiting for the partner (but it did receive the request).");
         }
@@ -128,9 +128,14 @@ public class FakePayoutGateway implements PayoutGateway {
                 : new PayoutResult(PayoutStatus.FAILED, ref, "Failed at the receiving bank", o.convertedNotPaid(), null);
     }
 
-    private Outcome outcomeFor(String account, long quotedNet) {
+    private Outcome outcomeFor(String account, long quotedNet, String reference) {
         if (account.startsWith("99")) {
             return new Outcome(PayoutStatus.FAILED, false, null);
+        }
+        if (account.startsWith("56")) {                       // fails once, but the retry (reference ends -R1, -R2...) pays
+            return reference.contains("-R")
+                    ? new Outcome(PayoutStatus.SUCCESS, false, null)
+                    : new Outcome(PayoutStatus.FAILED, retryEnabled, null);
         }
         if (account.startsWith("55")) {
             return new Outcome(PayoutStatus.FAILED, retryEnabled, null);

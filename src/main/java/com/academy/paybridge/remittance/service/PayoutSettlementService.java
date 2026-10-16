@@ -25,6 +25,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import com.academy.paybridge.remittance.domain.RemittanceAttempt;
+import java.util.Optional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -51,11 +53,12 @@ public class PayoutSettlementService {
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final PayoutProperties.Retry retry;
 
     public PayoutSettlementService(RemittanceRepository remittances, RemittanceAttemptRepository attempts,
                                    PayoutQuoteApi quoteApi, AccountApi accounts, LedgerApi ledger,
                                    PayoutGateway gateway, AuditService audit, ApplicationEventPublisher events,
-                                   PlatformTransactionManager txManager, Clock clock) {
+                                   PlatformTransactionManager txManager, Clock clock, PayoutProperties props)  {
         this.remittances = remittances;
         this.attempts = attempts;
         this.quoteApi = quoteApi;
@@ -66,6 +69,7 @@ public class PayoutSettlementService {
         this.events = events;
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
+        this.retry = props.retry();
     }
 
     // =====================================================================================
@@ -97,22 +101,34 @@ public class PayoutSettlementService {
     }
 
     /** Asks the partner for the truth by our reference, then settles once. Used by the webhook, the job and a verify. */
+    /** True if this reference is a payout's own reference or one of its retry references (the webhook uses it). */
+    public boolean knows(String reference) {
+        return remittances.findByReference(reference).isPresent() || attempts.findByCustomerReference(reference).isPresent();
+    }
+
+    /** Asks the partner for the truth by our reference, then settles once. Used by the webhook, the job and a verify. */
     public Remittance settleFromGateway(String reference) {
-        Remittance r = load(reference);
+        Remittance r = resolve(reference);                                    // a retry reference leads back to its payout
         if (isFinal(r)) {
             return r;
         }
-        PayoutResult result = gateway.verifyPayout(reference);                // no transaction open
-        if (result.status() == PayoutStatus.NOT_FOUND) {
-            return submit(reference);                                         // never received: send again, same reference
+        if (r.getStatus() == RemittanceStatus.RETRYING) {
+            return settleRetrying(r);                                         // retries on only (B5)
         }
-        return apply(reference, result);
+        String original = r.getReference();
+        PayoutResult result = gateway.verifyPayout(original);                 // no transaction open
+        if (result.status() == PayoutStatus.NOT_FOUND) {
+            return submit(original);                                          // never received: send again, same reference
+        }
+        return apply(original, result);
     }
 
     private Remittance apply(String reference, PayoutResult result) {
         return switch (result.status()) {
             case SUCCESS -> settleSuccess(reference, result);
-            case FAILED -> refund(reference, result.message());
+            case FAILED -> result.convertedNotPaid() && retry.enabled()
+                    ? startRetrying(reference, result.message())              // B5: converted, not paid, keep the money
+                    : refund(reference, result.message());
             case PENDING -> recordPending(reference, result.providerRef());
             case NOT_FOUND -> load(reference);
         };
@@ -226,6 +242,206 @@ public class PayoutSettlementService {
     }
 
     // =====================================================================================
+// RETRIES (B5, only when paybridge.payouts.retry.enabled is true; R-PAY-11)
+// =====================================================================================
+
+    private int maxAttempts() {
+        return Math.min(3, retry.maxAttempts());                              // the table allows 0 to 3
+    }
+
+    /** J2: the partner converted the money but did not pay it. Keep the conversion and try again later (O9: still PENDING to the customer). */
+    private Remittance startRetrying(String reference, String reason) {
+        return tx.execute(status -> {
+            Remittance r = lock(reference);
+            if (r.getStatus() != RemittanceStatus.PENDING) {
+                return r;                                                     // already moved on: do nothing twice
+            }
+            PayoutQuoteView quote = quoteOf(r);
+            post(PayoutJournals.conversionDone(reference, r.getSourceCurrency(), r.getPayoutCurrency(),
+                    r.getSourceAmountMinor(), quote.netMinor(), r.getFeeMinor(), r.getPayoutAmountMinor()));
+            Instant now = clock.instant();
+            r.setConversionDone(true);
+            r.setStatus(RemittanceStatus.RETRYING);
+            r.setAttempts(0);
+            r.setNextRetryAt(now.plus(retry.spacing()));
+            r.setProviderStatus("CONVERTED_NOT_PAID");
+            r.setUpdatedAt(now);
+            remittances.save(r);
+            recordAttemptResult(r, 0, PayoutStatus.FAILED.name());
+            audit.record("system", "PAYOUT_CONVERTED_NOT_PAID", reference,
+                    "converted but not paid; retry 1 of " + maxAttempts() + " is scheduled"
+                            + (reason == null ? "" : ": " + reason));
+            return r;
+        });
+    }
+
+    private Remittance settleRetrying(Remittance r) {
+        if (r.getNextRetryAt() != null) {                                     // waiting between attempts
+            return clock.instant().isBefore(r.getNextRetryAt()) ? r : beginRetry(r.getReference());
+        }
+        return checkRetry(r.getReference());                                  // an attempt is already in flight
+    }
+
+    /** Records the new attempt (with its NEW reference) in a short transaction, then sends it with no transaction open. */
+    private Remittance beginRetry(String reference) {
+        String retryRef = tx.execute(status -> {
+            Remittance r = lock(reference);
+            if (r.getStatus() != RemittanceStatus.RETRYING || r.getNextRetryAt() == null
+                    || clock.instant().isBefore(r.getNextRetryAt()) || r.getAttempts() >= maxAttempts()) {
+                return null;                                                  // not due, or somebody else started it
+            }
+            int n = r.getAttempts() + 1;
+            String ref = retryReference(reference, n);
+            Instant now = clock.instant();
+            attempts.save(new RemittanceAttempt(r.getId(), n, ref, null, "SUBMITTED", now));
+            r.setAttempts(n);
+            r.setNextRetryAt(null);                                           // null = an attempt is in flight
+            r.setProviderStatus("RETRY_" + n);
+            r.setUpdatedAt(now);
+            remittances.save(r);
+            audit.record("system", "PAYOUT_RETRY_STARTED", reference, "retry " + n + " of " + maxAttempts());
+            return ref;
+        });
+        return retryRef == null ? load(reference) : sendRetry(reference, retryRef);
+    }
+
+    /** A retry is a NEW same-currency payout of the converted amount, with its own reference. It never replays the first. */
+    private Remittance sendRetry(String reference, String retryRef) {
+        Remittance r = load(reference);
+        PayoutQuoteView quote = quoteOf(r);
+        PayoutRequest request = new PayoutRequest(retryRef, r.getPayoutCurrency(), r.getPayoutCurrency(),
+                r.getPayoutAmountMinor(), quote.country(), quote.bankCode(), quote.accountNumber(),
+                quote.accountName(), null, 0, quote.purpose());
+        try {
+            return applyRetry(reference, retryRef, gateway.initiatePayout(request));
+        } catch (PayoutUnavailableException e) {
+            return load(reference);                                           // unknown: stays in flight, the job asks later
+        } catch (PayoutRejectedException e) {
+            return retryFailed(reference, retryRef, e.getMessage());          // we know it did not go
+        }
+    }
+
+    private Remittance checkRetry(String reference) {
+        Remittance r = load(reference);
+        List<RemittanceAttempt> all = attempts.findByRemittanceIdOrderByAttemptAsc(r.getId());
+        RemittanceAttempt latest = all.get(all.size() - 1);
+        if (latest.getAttempt() == 0) {                                       // should not happen; recover by scheduling now
+            return tx.execute(status -> {
+                Remittance locked = lock(reference);
+                if (locked.getStatus() == RemittanceStatus.RETRYING && locked.getNextRetryAt() == null
+                        && locked.getAttempts() == 0) {
+                    locked.setNextRetryAt(clock.instant());
+                    remittances.save(locked);
+                }
+                return locked;
+            });
+        }
+        String retryRef = latest.getCustomerReference();
+        PayoutResult result = gateway.verifyPayout(retryRef);                 // no transaction open
+        if (result.status() == PayoutStatus.NOT_FOUND) {
+            return sendRetry(reference, retryRef);                            // never arrived: send again, same retry reference
+        }
+        return applyRetry(reference, retryRef, result);
+    }
+
+    private Remittance applyRetry(String reference, String retryRef, PayoutResult result) {
+        return switch (result.status()) {
+            case SUCCESS -> retrySucceeded(reference, retryRef, result.providerRef());
+            case FAILED -> retryFailed(reference, retryRef, result.message());
+            case PENDING -> retryPending(reference, retryRef, result.providerRef());
+            case NOT_FOUND -> load(reference);
+        };
+    }
+
+    private Remittance retryPending(String reference, String retryRef, String providerRef) {
+        return tx.execute(status -> {
+            Remittance r = lock(reference);
+            if (r.getStatus() == RemittanceStatus.RETRYING && r.getNextRetryAt() == null) {
+                r.setProviderPayoutRef(providerRef);
+                r.setUpdatedAt(clock.instant());
+                remittances.save(r);
+            }
+            return r;
+        });
+    }
+
+    /** J3c: the retry paid. The conversion was already booked by J2. */
+    private Remittance retrySucceeded(String reference, String retryRef, String providerRef) {
+        return tx.execute(status -> {
+            Remittance r = lock(reference);
+            if (!currentRetry(r, retryRef)) {
+                return r;                                                     // a duplicate or late answer changes nothing
+            }
+            PayoutQuoteView quote = quoteOf(r);
+            JournalDraft paid = PayoutJournals.paidAfterConversion(reference, r.getPayoutCurrency(),
+                    r.getPayoutAmountMinor());
+            post(paid);
+            Instant now = clock.instant();
+            r.setStatus(RemittanceStatus.SUCCESSFUL);
+            r.setProviderPayoutRef(providerRef);
+            r.setProviderStatus(PayoutStatus.SUCCESS.name());
+            r.setCompletedAt(now);
+            r.setUpdatedAt(now);
+            remittances.save(r);
+            recordAttemptResult(r, r.getAttempts(), PayoutStatus.SUCCESS.name());
+            quoteApi.complete(r.getQuoteId(), paid.key());
+            audit.record("system", "PAYOUT_SUCCEEDED", reference,
+                    "payout to " + mask(quote.accountNumber()) + " succeeded on retry " + r.getAttempts());
+            announce(r, quote, TransferStage.SUCCEEDED);
+            return r;
+        });
+    }
+
+    /** A retry failed: try again after the spacing, or after the last one undo the conversion and repay the customer (J5). */
+    private Remittance retryFailed(String reference, String retryRef, String reason) {
+        return tx.execute(status -> {
+            Remittance r = lock(reference);
+            if (!currentRetry(r, retryRef)) {
+                return r;
+            }
+            Instant now = clock.instant();
+            recordAttemptResult(r, r.getAttempts(), PayoutStatus.FAILED.name());
+            if (r.getAttempts() < maxAttempts()) {
+                r.setNextRetryAt(now.plus(retry.spacing()));
+                r.setUpdatedAt(now);
+                remittances.save(r);
+                audit.record("system", "PAYOUT_RETRY_FAILED", reference, "retry " + r.getAttempts() + " failed; trying again later");
+                return r;
+            }
+            PayoutQuoteView quote = quoteOf(r);
+            accounts.lockWalletsInOrder(List.of(r.getSourceAccountNumber()), r.getSourceCurrency());
+            accounts.credit(r.getSourceAccountNumber(), r.getSourceCurrency(), r.getSourceAmountMinor());
+            post(PayoutJournals.refundAfterConversion(reference, r.getSourceAccountNumber(), r.getSourceCurrency(),
+                    r.getPayoutCurrency(), r.getSourceAmountMinor(), quote.netMinor(), r.getFeeMinor(),
+                    r.getPayoutAmountMinor()));
+            r.setStatus(RemittanceStatus.FAILED);
+            r.setFailureReason(reason == null || reason.isBlank() ? "The payout failed." : reason);
+            r.setProviderStatus(PayoutStatus.FAILED.name());
+            r.setCompletedAt(now);
+            r.setUpdatedAt(now);
+            remittances.save(r);
+            quoteApi.fail(r.getQuoteId(), "Payout failed.");
+            audit.record("system", "PAYOUT_REFUNDED", reference, "all " + maxAttempts() + " retries failed; refunded "
+                    + r.getSourceAmountMinor() + " " + r.getSourceCurrency() + " (minor units), fee included");
+            announce(r, quote, TransferStage.FAILED);
+            return r;
+        });
+    }
+
+    /** True only for the attempt that is in flight right now, so a late or repeated answer is applied once. */
+    private boolean currentRetry(Remittance r, String retryRef) {
+        if (r.getStatus() != RemittanceStatus.RETRYING || r.getNextRetryAt() != null) {
+            return false;
+        }
+        return attempts.findByCustomerReference(retryRef)
+                .filter(a -> a.getRemittanceId().equals(r.getId()) && a.getAttempt() == r.getAttempts()).isPresent();
+    }
+
+    static String retryReference(String reference, int attempt) {
+        return reference + "-R" + attempt;
+    }
+
+    // =====================================================================================
     // HELPERS
     // =====================================================================================
 
@@ -241,12 +457,27 @@ public class PayoutSettlementService {
     }
 
     private void recordAttempt(Remittance r, String result) {
+        recordAttemptResult(r, 0, result);
+    }
+
+    private void recordAttemptResult(Remittance r, int attempt, String result) {
         attempts.findByRemittanceIdOrderByAttemptAsc(r.getId()).stream()
-                .filter(a -> a.getAttempt() == 0).findFirst()
+                .filter(a -> a.getAttempt() == attempt).findFirst()
                 .ifPresent(a -> {
                     a.setResult(result);
                     attempts.save(a);
                 });
+    }
+
+    /** A payout by its own reference, or by one of its retry references. */
+    private Remittance resolve(String reference) {
+        Optional<Remittance> direct = remittances.findByReference(reference);
+        if (direct.isPresent()) {
+            return direct.get();
+        }
+        return attempts.findByCustomerReference(reference)
+                .flatMap(a -> remittances.findById(a.getRemittanceId()))
+                .orElseThrow(() -> ApiException.notFound("PAYOUT_NOT_FOUND", "Payout not found."));
     }
 
     /** Amount shown is what the sender sent (net); charges are the fee; total is what was debited (like Paystack). */

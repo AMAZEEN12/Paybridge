@@ -77,7 +77,7 @@ public class FlutterwaveWebhookController {
         }
         String reference = event.data().reference();
         audit.recordIndependently("flutterwave", "WEBHOOK_RECEIVED", reference, event.event());
-        if (remittances.findByReference(reference).isEmpty()) {
+        if (!settlement.knows(reference)) {
             return ResponseEntity.ok().build();                    // unknown reference: ignore
         }
         try {

@@ -29,6 +29,13 @@ public class PayoutSettingsValidator {
                     + "Use your TEST secret key.");
         }
 
+        if (props.retry().maxAttempts() > 3) {
+            throw new IllegalStateException("paybridge.payouts.retry.max-attempts must be 3 or less (the table allows 0 to 3).");
+        }
+        if (props.retry().spacing().isNegative()) {
+            throw new IllegalStateException("paybridge.payouts.retry.spacing cannot be negative.");
+        }
+
         String rateMode = props.flutterwave().rateMode();
         if (!rateMode.equals("OWN_LOCK") && !rateMode.equals("PROVIDER_LOCK")) {
             throw new IllegalStateException(

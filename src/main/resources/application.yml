@@ -154,7 +154,7 @@ paybridge:
       rate: 0.01                                    # placeholder (used from B3)
       minimum-usd: 1
     retry:
-      enabled: false                                # B15, S16, O20
+      enabled: false          # B15, S16, O20. true only if the sandbox shows converted-but-unpaid; Flutterwave v3 shows no such state
       max-attempts: 3
       spacing: PT5M
     purposes: [ FAMILY_SUPPORT, EDUCATION, MEDICAL, RENT, GIFT, OTHER ]
