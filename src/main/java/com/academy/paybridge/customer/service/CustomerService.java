@@ -45,6 +45,14 @@ public class CustomerService implements CustomerApi {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public String countryOf(Long customerId) {
+        return customers.findById(customerId)
+                .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "Customer not found."))
+                .getCountry();
+    }
+
+    @Override
     @Transactional(noRollbackFor = ApiException.class)
     public void verifyPin(Long customerId, String pin) {
         Customer c = customers.findById(customerId)

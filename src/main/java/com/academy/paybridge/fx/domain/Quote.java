@@ -53,7 +53,7 @@ public class Quote {
     @Column(nullable = false, precision = 24, scale = 12)
     private BigDecimal rate;
 
-    @Column(name = "snapshot_id", nullable = false)
+    @Column(name = "snapshot_id")
     private Long snapshotId;
 
     @Column(name = "usd_equivalent_minor", nullable = false)

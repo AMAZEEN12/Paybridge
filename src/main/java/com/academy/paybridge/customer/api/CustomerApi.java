@@ -10,4 +10,7 @@ public interface CustomerApi {
      * the caller then fails. Throws ApiException (403) for a wrong, missing, or locked PIN.
      */
     void verifyPin(Long customerId, String pin);
+
+    /** The customer's stored two-letter country, the sender's country for the corridor rule (R-COR-2). */
+    String countryOf(Long customerId);
 }

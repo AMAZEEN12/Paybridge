@@ -21,7 +21,8 @@ public class SecurityConfig {
                         // the small web page
                         .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/convert.js", "/favicon.ico", "/error").permitAll()
                         // register, log in, and Paystack's webhook (protected by its own signature)
-                        .requestMatchers("/api/v1/auth/**", "/api/v1/webhooks/paystack").permitAll()
+                        .requestMatchers("/api/v1/auth/**", "/api/v1/webhooks/paystack",
+                                "/api/v1/webhooks/flutterwave").permitAll()
                         // Swagger and the health check
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()

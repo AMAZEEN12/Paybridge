@@ -41,7 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
+import com.academy.paybridge.fx.api.QuoteTotalsApi;
 @Service
 public class TransferService {
 
@@ -69,6 +69,7 @@ public class TransferService {
     private final CurrencyRegistry currencies;
     private final TransferLimitApi limits;
     private final RateApi rates;
+    private final QuoteTotalsApi quoteTotals;
 
     public TransferService(
             TransferRepository transfers,
@@ -87,7 +88,8 @@ public class TransferService {
             LedgerApi ledger,
             CurrencyRegistry currencies,
             TransferLimitApi limits,
-            RateApi rates) {
+            RateApi rates,
+            QuoteTotalsApi quoteTotals) {
 
         this.transfers = transfers;
         this.accounts = accounts;
@@ -107,6 +109,7 @@ public class TransferService {
         this.currencies = currencies;
         this.limits = limits;
         this.rates = rates;
+        this.quoteTotals = quoteTotals;
     }
 
     // ============================================================
@@ -721,7 +724,8 @@ public class TransferService {
                 .toInstant();
 
         long usedToday = transfers.sumUsdSince(
-                source, startOfDay, TransferStatus.FAILED);
+                source, startOfDay, TransferStatus.FAILED)
+                + quoteTotals.payoutUsdSince(customerId, startOfDay);        // payouts share the total (R-LIM2-3)
 
         FraudResult result = limits.evaluate(new TransferLimitContext(
                 TransferLimitContext.Kind.TRANSFER,

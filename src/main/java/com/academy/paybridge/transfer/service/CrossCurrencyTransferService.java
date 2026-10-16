@@ -30,12 +30,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-
+import com.academy.paybridge.fx.api.QuoteTotalsApi;
 /**
  * Cross-currency transfers between PayBridge accounts (R-XFR-5 to R-XFR-10, R-NTF-2). The quote lives in the fx
  * module; this class lets the customer ask for one and confirms it in a single database transaction.
@@ -58,12 +59,14 @@ public class CrossCurrencyTransferService {
     private final TransactionTemplate tx;
     private final Clock clock;
     private final ZoneId zone;
+    private final QuoteTotalsApi quoteTotals;
 
     public CrossCurrencyTransferService(TransferQuoteApi quotes, AccountApi accounts, CustomerApi customers,
                                         TransferRepository transfers, TransferLimitApi limits, LedgerApi ledger,
                                         AuditService audit, ApplicationEventPublisher events,
                                         ResolveRateLimiter limiter, CurrencyRegistry currencies,
-                                        PlatformTransactionManager txManager, Clock clock, AppProperties appProps) {
+                                        PlatformTransactionManager txManager, Clock clock, AppProperties appProps,
+                                        QuoteTotalsApi quoteTotals) {
         this.quotes = quotes;
         this.accounts = accounts;
         this.customers = customers;
@@ -77,6 +80,7 @@ public class CrossCurrencyTransferService {
         this.tx = new TransactionTemplate(txManager);
         this.clock = clock;
         this.zone = ZoneId.of(appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
+        this.quoteTotals = quoteTotals;
     }
 
     // =====================================================================================
@@ -88,7 +92,7 @@ public class CrossCurrencyTransferService {
         limiter.check(customerId);                 // a quote reveals the recipient's name, so it shares the lookup limit
         String sender = accounts.existingFor(customerId).accountNumber();
         return quotes.create(new NewTransferQuote(customerId, sender, recipientAccount, sourceCurrency,
-                receiveCurrency, amount, usedTodayUsd(sender)));
+                receiveCurrency, amount, usedTodayUsd(customerId, sender)));
     }
 
     // =====================================================================================
@@ -134,7 +138,7 @@ public class CrossCurrencyTransferService {
             throw ApiException.unprocessable("RECIPIENT_CANNOT_RECEIVE", "That account can no longer receive " + to + ".");
         }
         FraudResult verdict = limits.evaluate(new TransferLimitContext(
-                TransferLimitContext.Kind.TRANSFER, q.usdEquivalentMinor(), usedTodayUsd(sender)));
+                TransferLimitContext.Kind.TRANSFER, q.usdEquivalentMinor(), usedTodayUsd(q.customerId(), sender)));
         if (verdict.decision() == Decision.BLOCK) {
             throw ApiException.unprocessable("LIMIT_EXCEEDED", verdict.joinedReasons());
         }
@@ -196,8 +200,10 @@ public class CrossCurrencyTransferService {
         }
     }
 
-    private long usedTodayUsd(String sender) {
-        return transfers.sumUsdSince(sender, LagosDay.startOf(clock.instant(), zone), TransferStatus.FAILED);
+    private long usedTodayUsd(Long customerId, String sender) {
+        Instant since = LagosDay.startOf(clock.instant(), zone);
+        return transfers.sumUsdSince(sender, since, TransferStatus.FAILED)
+                + quoteTotals.payoutUsdSince(customerId, since);
     }
 
     private Optional<TransferResult> replayIfSeen(String source, String key, String hash) {
