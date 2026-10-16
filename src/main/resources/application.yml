@@ -138,7 +138,7 @@ paybridge:
     velocity-max-conversions: 5
     velocity-window-minutes: 10
   payouts:
-    provider: ${PAYBRIDGE_PAYOUT_PROVIDER:fake}     # fake until step B4
+    provider: ${PAYBRIDGE_PAYOUT_PROVIDER:fake}     # fake or flutterwave until step B4
     flutterwave:
       base-url: https://api.flutterwave.com/v3      # check against the current API reference (O21)
       secret-key: ${FLUTTERWAVE_SECRET_KEY:}        # secret, environment only

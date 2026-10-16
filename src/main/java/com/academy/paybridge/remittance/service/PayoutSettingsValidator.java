@@ -19,15 +19,25 @@ public class PayoutSettingsValidator {
             throw new IllegalStateException("paybridge.payouts.flutterwave." + e.getMessage());
         }
 
-        if (!"fake".equals(props.provider())) {
-            throw new IllegalStateException("paybridge.payouts.provider '" + props.provider()
-                    + "' is not available yet: the Flutterwave client arrives in step B4. Use 'fake'.");
+        String provider = props.provider();
+        if (!provider.equals("fake") && !provider.equals("flutterwave")) {
+            throw new IllegalStateException("paybridge.payouts.provider must be 'fake' or 'flutterwave', not '" + provider + "'.");
+        }
+        boolean real = provider.equals("flutterwave");
+        if (real && (props.flutterwave().secretKey() == null || props.flutterwave().secretKey().isBlank())) {
+            throw new IllegalStateException("FLUTTERWAVE_SECRET_KEY must be set when the payout provider is 'flutterwave'. "
+                    + "Use your TEST secret key.");
         }
 
         String rateMode = props.flutterwave().rateMode();
         if (!rateMode.equals("OWN_LOCK") && !rateMode.equals("PROVIDER_LOCK")) {
             throw new IllegalStateException(
                     "paybridge.payouts.flutterwave.rate-mode must be OWN_LOCK or PROVIDER_LOCK, not '" + rateMode + "'.");
+        }
+        // O1a: Flutterwave's v3 rates carry no rate id, so there is nothing for PROVIDER_LOCK to send.
+        if (real && rateMode.equals("PROVIDER_LOCK")) {
+            throw new IllegalStateException("rate-mode PROVIDER_LOCK needs a Flutterwave rate id, and the v3 rates "
+                    + "endpoint gives none. Use OWN_LOCK.");
         }
 
         if (mode != VerifyMode.LIVE && isLiveKey(props.flutterwave().secretKey())) {
