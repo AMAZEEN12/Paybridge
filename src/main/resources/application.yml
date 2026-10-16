@@ -54,6 +54,11 @@ paybridge:
   dev-funding-enabled: ${PAYBRIDGE_DEV_FUNDING_ENABLED:true}
   scheduler:
     enabled: true
+  corridors:
+    rules: # first match wins; no match = refused; same-country pairs are not corridors
+      - { from: "NG", to: "*",  enabled: true }    # Nigeria-outbound; set false to switch it off
+      - { from: "*",  to: "NG", enabled: true }    # remittance to Nigeria
+      - { from: "*",  to: "*",  enabled: true }    # other pairs (to review)
   reconciliation:
     enabled: ${PAYBRIDGE_RECONCILIATION_ENABLED:true}
     interval: ${PAYBRIDGE_RECONCILIATION_INTERVAL:PT1H}

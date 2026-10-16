@@ -20,7 +20,8 @@ import java.util.Optional;
 /**
  * Turns transfer events into notifications.
  *
- * AFTER_COMMIT: only notify customers about transfers whose transactions committed.
+ * AFTER_COMMIT: only notify customers about transfers whose transactions committed. fallbackExecution lets an event
+ * published with no transaction open (a failed cross-currency transfer, after its rollback) go out at once.
  * @Async: a slow or broken notifier cannot slow down the transfer.
  * Every failure is caught and logged, never rethrown.
  */
@@ -72,23 +73,33 @@ public class TransferNotificationListener {
 
             String ref = " Ref " + e.reference() + ".";
 
+            boolean cross = e.targetCurrency() != null;
+
             switch (e.stage()) {
                 case COMPLETED -> {
-                    tell(
-                            e.sourceAccount(),
-                            "DEBIT",
-                            "Money sent",
-                            "You sent " + show(e.amountMinor(), e.currency())
-                                    + " to " + dst + "." + charges + ref,
-                            e.reference());
+                    String sent;
+                    String received;
 
-                    tell(
-                            e.destinationAccount(),
-                            "CREDIT",
-                            "Money received",
-                            "You received " + show(e.amountMinor(), e.currency())
-                                    + " from " + src + "." + ref,
-                            e.reference());
+                    if (cross) {
+                        // The sender paid totalDebit (the fee is inside it); the recipient got the other currency.
+                        sent = "You sent " + show(e.totalDebitMinor(), e.currency())
+                                + " to " + dst + ". They received "
+                                + show(e.targetAmountMinor(), e.targetCurrency()) + "."
+                                + (e.chargesMinor() > 0
+                                ? " Fee " + show(e.chargesMinor(), e.currency()) + " included."
+                                : "")
+                                + ref;
+                        received = "You received " + show(e.targetAmountMinor(), e.targetCurrency())
+                                + " from " + src + "." + ref;
+                    } else {
+                        sent = "You sent " + show(e.amountMinor(), e.currency())
+                                + " to " + dst + "." + charges + ref;
+                        received = "You received " + show(e.amountMinor(), e.currency())
+                                + " from " + src + "." + ref;
+                    }
+
+                    tell(e.sourceAccount(), "DEBIT", "Money sent", sent, e.reference());
+                    tell(e.destinationAccount(), "CREDIT", "Money received", received, e.reference());
                 }
 
                 case ACCEPTED -> tell(
@@ -117,6 +128,15 @@ public class TransferNotificationListener {
                                 + " to " + where + " failed. "
                                 + show(e.totalDebitMinor(), e.currency())
                                 + " has been returned to your account." + ref,
+                        e.reference());
+
+                // R-NTF-2: one message for the sender; it says nothing moved and never says "refunded".
+                case NOT_SENT -> tell(
+                        e.sourceAccount(),
+                        "TRANSFER_FAILED",
+                        "Transfer did not go through",
+                        "Your transfer of " + show(e.totalDebitMinor(), e.currency())
+                                + " to " + dst + " did not go through. No money moved." + ref,
                         e.reference());
             }
 

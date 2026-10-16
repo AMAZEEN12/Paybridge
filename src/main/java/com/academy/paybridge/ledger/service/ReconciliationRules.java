@@ -2,6 +2,7 @@
 package com.academy.paybridge.ledger.service;
 
 import com.academy.paybridge.ledger.api.CurrencyTotals;
+import com.academy.paybridge.ledger.api.LedgerAccounts;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.ledger.api.ReconciliationReport;
 import com.academy.paybridge.shared.money.CurrencyRegistry;
@@ -22,13 +23,18 @@ import java.util.function.LongFunction;
  * Checks:
  * 1. Every journal has equal debits and credits.
  * 2. Every PayBridge wallet's balance equals its ledger total.
- * 3. The ledger has no lines for a wallet that does not exist.
- * 4. Money in = money held + money in flight + money paid out,
- *    accounting for FX-related ledger-only accounts where applicable.
+ * 3. The ledger has no lines for a wallet that does not exist, or for an outside account nobody knows.
+ * 4. Money in = money held + money in flight + money paid out + the ledger-only accounts
+ *    (FX pool and fee, payout fee, rate difference, revenue, tax payable).
  */
 public final class ReconciliationRules {
 
     private static final String NGN = "NGN";
+
+    /** Ledger-only accounts that hold PayBridge's own money or its obligations; counted as "other" in check 4. */
+    private static final String[] OTHER_PREFIXES = {
+            "EXT:PAYOUT_FEE", "EXT:RATE_DIFF", "EXT:REVENUE", "EXT:TAX_PAYABLE"
+    };
 
     private ReconciliationRules() {
     }
@@ -53,7 +59,8 @@ public final class ReconciliationRules {
                 unbalancedJournals,
                 ledgerNet,
                 balances,
-                Money::format
+                Money::format,
+                NGN
         );
     }
 
@@ -138,7 +145,8 @@ public final class ReconciliationRules {
                     unbalanced,
                     net,
                     held,
-                    formatter(currency, registry)
+                    formatter(currency, registry),
+                    currency
             );
 
             for (String problem : report.problems()) {
@@ -211,6 +219,15 @@ public final class ReconciliationRules {
                 : registry.format(minor, currency);
     }
 
+    /** The net of several named accounts (an absent one counts as zero). */
+    private static long sum(Map<String, Long> ledgerNet, String... accounts) {
+        long total = 0;
+        for (String account : accounts) {
+            total += ledgerNet.getOrDefault(account, 0L);
+        }
+        return total;
+    }
+
     private static ReconciliationReport analyse(
             Instant now,
             long entries,
@@ -218,7 +235,8 @@ public final class ReconciliationRules {
             List<Object[]> unbalancedJournals,
             Map<String, Long> ledgerNet,
             Map<String, Long> balances,
-            LongFunction<String> fmt) {
+            LongFunction<String> fmt,
+            String currency) {
 
         List<String> problems = new ArrayList<>();
 
@@ -254,8 +272,11 @@ public final class ReconciliationRules {
         }
 
         for (String account : new TreeSet<>(ledgerNet.keySet())) {
-            if (!account.startsWith("EXT:")
-                    && !balances.containsKey(account)) {
+            if (account.startsWith("EXT:")) {
+                if (!LedgerAccounts.isKnownExternal(account)) {
+                    problems.add("Ledger has lines for an unknown outside account " + account);
+                }
+            } else if (!balances.containsKey(account)) {
                 problems.add(
                         "Ledger has lines for an unknown account "
                                 + Money.maskAccount(
@@ -270,19 +291,22 @@ public final class ReconciliationRules {
                         + ledgerNet.getOrDefault(LedgerApi.EXT_FUNDING, 0L)
         );
 
-        long paidOut = ledgerNet.getOrDefault(
-                LedgerApi.EXT_PAID_OUT, 0L
-        );
-
-        long inFlight = ledgerNet.getOrDefault(
-                LedgerApi.EXT_IN_FLIGHT, 0L
-        );
+        // The Naira names have no suffix; the other currencies end in :XXX. Both count, in whichever currency this is.
+        long paidOut = sum(ledgerNet, LedgerApi.EXT_PAID_OUT, "EXT:PAID_OUT:" + currency);
+        long inFlight = sum(ledgerNet, LedgerApi.EXT_IN_FLIGHT, "EXT:IN_FLIGHT:" + currency);
 
         long fx = 0;
+        long other = 0;
 
         for (Map.Entry<String, Long> entry : ledgerNet.entrySet()) {
-            if (entry.getKey().startsWith("EXT:FX_")) {
+            String account = entry.getKey();
+            if (account.startsWith("EXT:FX_")) {
                 fx += entry.getValue();
+            }
+            for (String prefix : OTHER_PREFIXES) {
+                if (account.equals(prefix) || account.startsWith(prefix + ":")) {
+                    other += entry.getValue();
+                }
             }
         }
 
@@ -293,7 +317,7 @@ public final class ReconciliationRules {
             );
         }
 
-        if (held + inFlight + paidOut + fx != funded) {
+        if (held + inFlight + paidOut + fx + other != funded) {
             problems.add(
                     "Money does not add up: held "
                             + fmt.apply(held)
@@ -303,6 +327,9 @@ public final class ReconciliationRules {
                             + fmt.apply(paidOut)
                             + (fx != 0
                             ? " + FX pool and fee " + fmt.apply(fx)
+                            : "")
+                            + (other != 0
+                            ? " + payout fees and revenue " + fmt.apply(other)
                             : "")
                             + " should equal funded "
                             + fmt.apply(funded)

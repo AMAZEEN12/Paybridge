@@ -84,16 +84,27 @@ public final class TransferDtos {
         }
     }
 
+    /**
+     * For a cross-currency transfer, {@code currency}, {@code amount} and {@code fee} are in the sender's currency
+     * (amount + fee = totalDebit), and {@code targetCurrency} and {@code targetAmount} are what the recipient got.
+     * Both are null for every other transfer.
+     */
     public record TransferResponse(
             String reference, TransferType type, TransferStatus status,
             String sourceAccountNumber, String destinationAccountNumber,
             String destinationBankCode, String destinationBankName, String destinationAccountName,
             String currency, BigDecimal amount, BigDecimal fee, BigDecimal vat, BigDecimal stampDuty, BigDecimal totalDebit,
-            String narration, String note, Instant createdAt, Instant updatedAt) {
+            String narration, String note, Instant createdAt, Instant updatedAt,
+            String targetCurrency, BigDecimal targetAmount) {
 
         /** Amounts are shown with the decimals of the transfer's own currency (2 for NGN and USD, 0 for JPY). */
         public static TransferResponse from(Transfer t, CurrencyRegistry currencies) {
             int decimals = currencies.find(t.getCurrency()).map(CurrencyInfo::minorUnits).orElse(2);
+            BigDecimal targetAmount = null;
+            if (t.getTargetCurrency() != null && t.getTargetAmountMinor() != null) {
+                int targetDecimals = currencies.find(t.getTargetCurrency()).map(CurrencyInfo::minorUnits).orElse(2);
+                targetAmount = BigDecimal.valueOf(t.getTargetAmountMinor(), targetDecimals);
+            }
             return new TransferResponse(t.getReference(), t.getType(), t.getStatus(),
                     t.getSourceAccountNumber(), t.getDestinationAccountNumber(),
                     t.getDestinationBankCode(), t.getDestinationBankName(), t.getDestinationAccountName(),
@@ -101,7 +112,8 @@ public final class TransferDtos {
                     BigDecimal.valueOf(t.getAmountMinor(), decimals), BigDecimal.valueOf(t.getFeeMinor(), decimals),
                     BigDecimal.valueOf(t.getVatMinor(), decimals), BigDecimal.valueOf(t.getStampDutyMinor(), decimals),
                     BigDecimal.valueOf(t.getTotalDebitMinor(), decimals),
-                    t.getNarration(), t.getNote(), t.getCreatedAt(), t.getUpdatedAt());
+                    t.getNarration(), t.getNote(), t.getCreatedAt(), t.getUpdatedAt(),
+                    t.getTargetCurrency(), targetAmount);
         }
     }
 

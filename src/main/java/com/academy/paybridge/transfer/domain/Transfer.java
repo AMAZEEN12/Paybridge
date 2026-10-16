@@ -56,6 +56,7 @@ public class Transfer {
     @Column(nullable = false, updatable = false)
     private String currency;
 
+    /** For a cross-currency transfer this is the part that was converted (source minus fee). */
     @Column(name = "amount_minor", nullable = false, updatable = false)
     private long amountMinor;
 
@@ -71,7 +72,7 @@ public class Transfer {
     @Column(name = "total_debit_minor", nullable = false, updatable = false)
     private long totalDebitMinor;
 
-    // Filled only by cross-currency transfers (step A5). Empty for every transfer today.
+    // Filled only by cross-currency transfers (step A5). Empty for every other transfer.
     @Column(name = "target_currency", updatable = false)
     private String targetCurrency;
 
@@ -138,6 +139,13 @@ public class Transfer {
         this.destinationBankName = bankName;
         this.destinationAccountName = accountName;
         this.recipientCode = recipientCode;
+    }
+
+    /** What the recipient gets and the quote it came from (step A5). Call once, before the first save. */
+    public void setCrossCurrency(String targetCurrency, long targetAmountMinor, UUID quoteId) {
+        this.targetCurrency = targetCurrency;
+        this.targetAmountMinor = targetAmountMinor;
+        this.quoteId = quoteId;
     }
 
     public long chargesMinor() {

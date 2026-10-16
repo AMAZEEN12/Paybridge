@@ -13,16 +13,28 @@ import java.util.UUID;
 public interface QuoteRepository extends JpaRepository<Quote, UUID> {
 
     /**
-     * Atomically moves a quote from ACTIVE to EXECUTING (R-QUO-4). Only the OWNER's quote, only while it is
-     * unexpired. Returns 1 if it moved, 0 if not (wrong owner, expired, or already used).
+     * Atomically moves a CONVERSION quote from ACTIVE to EXECUTING (R-QUO-4). Only the OWNER's quote, only while it
+     * is unexpired, and only a conversion quote: a transfer quote can never run as a conversion. Returns 1 if it
+     * moved, 0 if not (wrong owner, wrong type, expired, or already used).
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("UPDATE Quote q SET q.status = com.academy.paybridge.fx.domain.QuoteStatus.EXECUTING " +
             "WHERE q.id = :id AND q.customerId = :customerId " +
+            "AND q.type = com.academy.paybridge.fx.domain.QuoteType.CONVERSION " +
             "AND q.status = com.academy.paybridge.fx.domain.QuoteStatus.ACTIVE " +
             "AND q.expiresAt > :now")
     int moveToExecuting(@Param("id") UUID id, @Param("customerId") Long customerId, @Param("now") Instant now);
+
+    /** The same for a TRANSFER quote (R-XFR-7): single use, owner only, unexpired. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("UPDATE Quote q SET q.status = com.academy.paybridge.fx.domain.QuoteStatus.EXECUTING " +
+            "WHERE q.id = :id AND q.customerId = :customerId " +
+            "AND q.type = com.academy.paybridge.fx.domain.QuoteType.TRANSFER " +
+            "AND q.status = com.academy.paybridge.fx.domain.QuoteStatus.ACTIVE " +
+            "AND q.expiresAt > :now")
+    int moveTransferToExecuting(@Param("id") UUID id, @Param("customerId") Long customerId, @Param("now") Instant now);
 
     /** Counts unexpired ACTIVE quotes for a customer (R-QUO-7). */
     @Query("SELECT COUNT(q) FROM Quote q WHERE q.customerId = :customerId " +
@@ -30,9 +42,13 @@ public interface QuoteRepository extends JpaRepository<Quote, UUID> {
             "AND q.expiresAt > :now")
     long countActiveQuotes(@Param("customerId") Long customerId, @Param("now") Instant now);
 
-    /** Completed and executing conversions in USD minor units since the start of the customer's day (R-LIM-2). */
+    /**
+     * Completed and executing CONVERSIONS in USD minor units since the start of the customer's day (R-LIM-2).
+     * Transfer quotes are not counted: conversions keep their own total (R-LIM2-3, acceptance 21d).
+     */
     @Query("SELECT COALESCE(SUM(q.usdEquivalentMinor), 0) FROM Quote q " +
             "WHERE q.customerId = :customerId " +
+            "AND q.type = com.academy.paybridge.fx.domain.QuoteType.CONVERSION " +
             "AND q.status IN (com.academy.paybridge.fx.domain.QuoteStatus.COMPLETED, " +
             "com.academy.paybridge.fx.domain.QuoteStatus.EXECUTING) " +
             "AND q.createdAt >= :startOfDay")
