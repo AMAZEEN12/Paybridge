@@ -166,3 +166,9 @@ paybridge:
       - { code: "GH", name: Ghana, currency: GHS, bank-fields: [ { name: bankCode, label: "Bank code", required: true }, { name: accountNumber, label: "Account number", required: true } ] }
       - { code: "KE", name: Kenya, currency: KES, bank-fields: [ { name: bankCode, label: "Bank code", required: true }, { name: accountNumber, label: "Account number", required: true } ] }
       - { code: "ZA", name: "South Africa", currency: ZAR, bank-fields: [ { name: bankCode, label: "Branch code", required: true }, { name: accountNumber, label: "Account number", required: true } ] }
+  settlement:
+    admin-key: ${PAYBRIDGE_SETTLEMENT_ADMIN_KEY:}     # secret, environment only; empty = settlement endpoints are off (404)
+    run-at: "00:30"                                   # UTC, used from C2 (O12)
+    statement-lag: PT24H                              # used from C3 (O10)
+    thresholds: [ ]                                    # warning levels (O11), e.g.
+    #  - { account: "EXT:FX_POOL:USD", min-minor: 100000 }   # $1,000.00; a pool below this is flagged, nobody is blocked

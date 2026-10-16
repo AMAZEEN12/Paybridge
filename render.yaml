@@ -51,3 +51,5 @@ services:
       # or set PAYSTACK_RESOLVE_MODE = live for real names (Paystack test mode allows about 3 a day; the app counts them).
       # To switch off the "Add test money" button on a public deployment:
       #   PAYBRIDGE_DEV_FUNDING_ENABLED = false
+      - key: PAYBRIDGE_SETTLEMENT_ADMIN_KEY
+        sync: false
