@@ -81,6 +81,10 @@ public class Transfer {
     @Column(name = "quote_id", updatable = false)
     private UUID quoteId;
 
+    /** USD equivalent in cents for a non-NGN transfer (step A4). 0 for NGN-to-NGN. Counts toward the daily limit. */
+    @Column(name = "usd_equivalent_minor", nullable = false, updatable = false)
+    private long usdEquivalentMinor;
+
     @Column(updatable = false)
     private String narration;
 
@@ -160,6 +164,9 @@ public class Transfer {
     public String getTargetCurrency() { return targetCurrency; }
     public Long getTargetAmountMinor() { return targetAmountMinor; }
     public UUID getQuoteId() { return quoteId; }
+    public long getUsdEquivalentMinor() { return usdEquivalentMinor; }
+    /** Set once, before the first save. */
+    public void setUsdEquivalentMinor(long usdEquivalentMinor) { this.usdEquivalentMinor = usdEquivalentMinor; }
     public String getNarration() { return narration; }
     public String getIdempotencyKey() { return idempotencyKey; }
     public String getRequestHash() { return requestHash; }

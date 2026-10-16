@@ -125,8 +125,10 @@ paybridge:
   fee:
     rate: 0.005
     free-days: 30
-  limits:
+  llimits:
     conversion-max-usd: 1000
-    daily-max-usd: 5000
+    transfer-max-usd: 1000          # placeholder, non-NGN transfers (A4)
+    payout-max-usd: 1000            # placeholder, used from step B3
+    daily-max-usd: 5000             # transfers and payouts together (conversions keep their own total)
     velocity-max-conversions: 5
     velocity-window-minutes: 10

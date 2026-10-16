@@ -1,16 +1,15 @@
 package com.academy.paybridge.transfer.service;
 
 import com.academy.paybridge.account.api.AccountApi;
-import com.academy.paybridge.compliance.api.Decision;
-import com.academy.paybridge.compliance.api.FraudApi;
-import com.academy.paybridge.compliance.api.FraudContext;
-import com.academy.paybridge.compliance.api.FraudResult;
+import com.academy.paybridge.compliance.api.*;
 import com.academy.paybridge.customer.api.CustomerApi;
+import com.academy.paybridge.fx.api.RateApi;
 import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.config.AppProperties;
 import com.academy.paybridge.shared.exception.ApiException;
+import com.academy.paybridge.shared.money.CurrencyRegistry;
 import com.academy.paybridge.shared.money.Money;
 import com.academy.paybridge.transfer.api.TransferEvent;
 import com.academy.paybridge.transfer.api.TransferStage;
@@ -25,7 +24,6 @@ import com.academy.paybridge.transfer.gateway.GatewayUnavailableException;
 import com.academy.paybridge.transfer.gateway.ResolvedAccount;
 import com.academy.paybridge.transfer.gateway.TransferGateway;
 import com.academy.paybridge.transfer.repository.TransferRepository;
-import com.academy.paybridge.shared.money.CurrencyRegistry;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,6 +31,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -67,6 +67,8 @@ public class TransferService {
     private final ZoneId zone;
     private final LedgerApi ledger;
     private final CurrencyRegistry currencies;
+    private final TransferLimitApi limits;
+    private final RateApi rates;
 
     public TransferService(
             TransferRepository transfers,
@@ -83,7 +85,9 @@ public class TransferService {
             Clock clock,
             AppProperties appProps,
             LedgerApi ledger,
-            CurrencyRegistry currencies) {
+            CurrencyRegistry currencies,
+            TransferLimitApi limits,
+            RateApi rates) {
 
         this.transfers = transfers;
         this.accounts = accounts;
@@ -101,15 +105,17 @@ public class TransferService {
                 appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
         this.ledger = ledger;
         this.currencies = currencies;
+        this.limits = limits;
+        this.rates = rates;
     }
 
-    // =====================================================================================
+    // ============================================================
     // INTERNAL TRANSFER
-    // =====================================================================================
+    // ============================================================
 
     /**
-     * Same-currency transfer: the sender pays from their wallet in the selected currency,
-     * and the recipient receives the same amount in that currency.
+     * Same-currency transfer: the sender pays from their wallet in
+     * the selected currency, and the recipient receives the same amount.
      */
     public TransferResult transferInternal(
             Long customerId,
@@ -154,6 +160,12 @@ public class TransferService {
 
         customers.verifyPin(customerId, pin);
 
+        // Obtain the USD equivalent before opening the transaction.
+        // NGN transfers retain the existing Naira flow.
+        long usdMinor = NGN.equals(currency)
+                ? 0L
+                : usdEquivalent(amountMinor, currency);
+
         try {
             return tx.execute(status -> doInternal(
                     actor,
@@ -162,6 +174,7 @@ public class TransferService {
                     destination,
                     currency,
                     amountMinor,
+                    usdMinor,
                     narration,
                     key,
                     hash));
@@ -182,6 +195,7 @@ public class TransferService {
             String destination,
             String currency,
             long amountMinor,
+            long usdMinor,
             String narration,
             String key,
             String hash) {
@@ -204,6 +218,10 @@ public class TransferService {
         Optional<TransferResult> replay = replayIfSeen(source, key, hash);
         if (replay.isPresent()) {
             return replay.get();
+        }
+
+        if (!naira) {
+            checkTransferLimit(customerId, source, usdMinor);
         }
 
         boolean flagged = naira
@@ -231,6 +249,7 @@ public class TransferService {
                 hash,
                 clock.instant());
 
+        t.setUsdEquivalentMinor(usdMinor);
         transfers.save(t);
 
         if (naira) {
@@ -295,9 +314,9 @@ public class TransferService {
         return new TransferResult(t, false);
     }
 
-    // =====================================================================================
+    // ============================================================
     // EXTERNAL TRANSFER
-    // =====================================================================================
+    // ============================================================
 
     public TransferResult transferExternal(
             Long customerId,
@@ -500,9 +519,9 @@ public class TransferService {
         return new TransferResult(t, false);
     }
 
-    // =====================================================================================
+    // ============================================================
     // READING, VERIFYING, QUOTING
-    // =====================================================================================
+    // ============================================================
 
     public Transfer verify(Long customerId, String reference) {
         Transfer t = getVisible(customerId, reference);
@@ -564,9 +583,9 @@ public class TransferService {
         return chargeCalculator.calculate(amountKobo, type);
     }
 
-    // =====================================================================================
+    // ============================================================
     // HELPERS
-    // =====================================================================================
+    // ============================================================
 
     private Optional<TransferResult> replayIfSeen(
             String source,
@@ -598,7 +617,7 @@ public class TransferService {
 
         Instant now = clock.instant();
 
-        Instant startOfDay = clock.instant()
+        Instant startOfDay = now
                 .atZone(zone)
                 .toLocalDate()
                 .atStartOfDay(zone)
@@ -661,11 +680,65 @@ public class TransferService {
         return false;
     }
 
+    /**
+     * Converts a foreign-currency amount to USD minor units for limit checks.
+     * Verify the RateApi method and its rate direction against your FX implementation.
+     */
+    private long usdEquivalent(long amountMinor, String currency) {
+        BigDecimal toUsd = rates.rateWithUsd(currency, currency).toUsd();
 
+        int decimals = currencies.find(currency)
+                .map(com.academy.paybridge.shared.money.CurrencyInfo::minorUnits)
+                .orElse(2);
 
+        BigDecimal usd = BigDecimal.valueOf(amountMinor).multiply(toUsd);
 
+        if (decimals > 2) {
+            usd = usd.divide(
+                    BigDecimal.TEN.pow(decimals - 2),
+                    20,
+                    RoundingMode.DOWN);
+        } else if (decimals < 2) {
+            usd = usd.multiply(BigDecimal.TEN.pow(2 - decimals));
+        }
 
-    private static void addChargeAccounts(List<String> toLock, Charges charges) {
+        return usd.setScale(0, RoundingMode.FLOOR).longValueExact();
+    }
+
+    /**
+     * Checks the per-transfer and daily USD-equivalent limit.
+     * The daily total uses the start of the current day in the configured zone.
+     */
+    private void checkTransferLimit(
+            Long customerId,
+            String source,
+            long usdMinor) {
+
+        Instant startOfDay = clock.instant()
+                .atZone(zone)
+                .toLocalDate()
+                .atStartOfDay(zone)
+                .toInstant();
+
+        long usedToday = transfers.sumUsdSince(
+                source, startOfDay, TransferStatus.FAILED);
+
+        FraudResult result = limits.evaluate(new TransferLimitContext(
+                TransferLimitContext.Kind.TRANSFER,
+                usdMinor,
+                usedToday));
+
+        if (result.decision() == Decision.BLOCK) {
+            throw ApiException.unprocessable(
+                    "LIMIT_EXCEEDED",
+                    result.joinedReasons());
+        }
+    }
+
+    private static void addChargeAccounts(
+            List<String> toLock,
+            Charges charges) {
+
         if (charges.feeKobo() > 0) {
             toLock.add(AccountApi.FEE_ACCOUNT);
         }
@@ -689,7 +762,10 @@ public class TransferService {
         }
 
         if (charges.stampDutyKobo() > 0) {
-            accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, charges.stampDutyKobo());
+            accounts.credit(
+                    AccountApi.STAMP_DUTY_ACCOUNT,
+                    NGN,
+                    charges.stampDutyKobo());
         }
     }
 
@@ -697,17 +773,27 @@ public class TransferService {
         return "trf_" + UUID.randomUUID().toString().replace("-", "");
     }
 
-    /** Naira keeps its exact old wording; other currencies use their own symbol and decimals. */
+    /**
+     * Naira keeps its existing wording; other currencies use their own
+     * symbols and decimal places.
+     */
     private String show(long minor, String currency) {
-        return NGN.equals(currency) ? Money.format(minor) : currencies.format(minor, currency);
+        return NGN.equals(currency)
+                ? Money.format(minor)
+                : currencies.format(minor, currency);
     }
 
-    /** R-XFR-2: the recipient needs a wallet in the currency (active or parked); the message names what they accept. */
+    /**
+     * The recipient must have a wallet in the currency being transferred.
+     */
     private void requireReceivable(String destination, String currency) {
         List<String> accepted = accounts.receivableCurrencies(destination);
+
         if (!accepted.contains(currency)) {
-            throw ApiException.unprocessable("RECIPIENT_CANNOT_RECEIVE",
-                    "That account cannot receive " + currency + ". It accepts: " + String.join(", ", accepted) + ".");
+            throw ApiException.unprocessable(
+                    "RECIPIENT_CANNOT_RECEIVE",
+                    "That account cannot receive " + currency
+                            + ". It accepts: " + String.join(", ", accepted) + ".");
         }
     }
 }

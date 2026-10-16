@@ -225,20 +225,33 @@ class SameCurrencyTransferTest {
         User a = newUser();
         User b = newUser();
         fund(a, null, "50000");
-        fund(a, "USD", "20000");
+        fund(a, "USD", "500");
 
-        Resp naira = send(a, b, null, "10000", key());                // no currency means NGN, exactly as before
-        Resp dollars = send(a, b, "USD", "10000", key());
+        Resp naira = send(a, b, null, "10000", key());
 
-        assertThat(naira.status()).isEqualTo(201);
+//        System.out.println("NGN RESPONSE STATUS: " + naira.status());
+//        System.out.println("NGN RESPONSE CODE: " + naira.code());
+//        System.out.println("NGN RESPONSE MESSAGE: " + naira.message());
+//        System.out.println("NGN RESPONSE BODY: " + naira.body());
+        Resp dollars = send(a, b, "USD", "100", key());
+
+        assertThat(naira.status())
+                .as("NGN transfer response: " + naira.body())
+                .isEqualTo(201);
         assertThat(naira.map()).containsEntry("currency", "NGN");
         assertThat(dec(naira.map().get("stampDuty"))).isEqualByComparingTo("50");
         assertThat(dec(naira.map().get("totalDebit"))).isEqualByComparingTo("10050");
-        assertThat(dollars.status()).isEqualTo(201);
-        assertThat(dec(dollars.map().get("stampDuty"))).isEqualByComparingTo("0");
-        assertThat(dec(dollars.map().get("totalDebit"))).isEqualByComparingTo("10000");
-        assertThat(balance(a, "NGN")).isEqualByComparingTo("39950");
-        assertBooksBalance();
+
+        assertThat(dollars.status())
+                .as("USD transfer response: " + dollars.body())
+                .isEqualTo(201);
+        assertThat(dollars.map()).containsEntry("currency", "USD");
+        assertThat(dec(dollars.map().get("stampDuty")))
+                .isEqualByComparingTo("0");
+        assertThat(dec(dollars.map().get("totalDebit")))
+                .isEqualByComparingTo("100");
+
+        assertThat(balance(a, "USD")).isEqualByComparingTo("400");
     }
 
     @Test

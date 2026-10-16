@@ -58,4 +58,13 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             + "and t.type = :type and t.status = :ok and t.createdAt >= :since")
     long sumIncomingSince(@Param("n") String account, @Param("type") TransferType type,
                           @Param("ok") TransferStatus ok, @Param("since") Instant since);
+
+    /**
+     * Non-NGN transfers the customer's account has sent since the start of the day, in USD cents (R-LIM2-3).
+     * Failed transfers do not count. NGN-to-NGN rows hold 0, so they add nothing.
+     */
+    @Query("select coalesce(sum(t.usdEquivalentMinor), 0L) from Transfer t "
+            + "where t.sourceAccountNumber = :n and t.createdAt >= :since and t.status <> :failed")
+    long sumUsdSince(@Param("n") String account, @Param("since") Instant since,
+                     @Param("failed") TransferStatus failed);
 }
