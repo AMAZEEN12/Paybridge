@@ -2,6 +2,7 @@ package com.academy.paybridge.transfer.service;
 
 import com.academy.paybridge.shared.config.AppProperties;
 import com.academy.paybridge.shared.exception.ApiException;
+import com.academy.paybridge.transfer.api.LookupLimitApi;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -13,9 +14,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Name enquiry tells a caller who owns a bank account, so it must not be usable as a lookup tool.
  * At most N lookups per customer per minute. In memory: enough for one app instance.
+ * The recipient lookup, the Paystack name enquiry and payout verification all share it (R-VER-7).
  */
 @Component
-public class ResolveRateLimiter {
+public class ResolveRateLimiter implements LookupLimitApi {
 
     private final ConcurrentHashMap<Long, Deque<Instant>> hits = new ConcurrentHashMap<>();
     private final int limitPerMinute;
@@ -26,6 +28,7 @@ public class ResolveRateLimiter {
         this.clock = clock;
     }
 
+    @Override
     public void check(Long customerId) {
         Instant now = clock.instant();
         Instant cutoff = now.minusSeconds(60);
