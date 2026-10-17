@@ -18,3 +18,6 @@ paybridge:
     velocity-max-transfers: 1000     # the concurrency test sends many transfers on purpose
     max-daily-outgoing-kobo: 100000000000
 
+
+  payouts:
+    provider: fake

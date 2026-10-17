@@ -443,25 +443,77 @@
     }
 
     function poWatch(reference) {
-        var tries = 0;
-
         clearInterval(po.poll);
-        po.poll = setInterval(function () {
+
+        var tries = 0;
+        var maxTries = 40;
+        var stopped = false;
+
+        function stopPolling(message) {
+            if (stopped) return;
+
+            stopped = true;
+            clearInterval(po.poll);
+            po.poll = null;
+
+            if (message) {
+                show($('poResult'), 'wait', message);
+            }
+
+            loadPayouts();
+        }
+
+        function checkStatus() {
+            if (stopped) return;
+
+            if (tries >= maxTries) {
+                stopPolling(
+                    'Status check paused. Your payout may still be processing. ' +
+                    'Check My payouts before trying again.'
+                );
+                return;
+            }
+
             tries++;
 
-            api('/payouts/' + reference).then(function (r) {
-                var p = r.data;
+            api('/payouts/' + encodeURIComponent(reference))
+                .then(function (r) {
+                    if (stopped) return;
 
-                show($('poResult'), p.status === 'FAILED' ? 'bad' : (p.status === 'PENDING' ? 'wait' : ''), poStatusText(p));
+                    var p = r.data;
 
-                if (p.status !== 'PENDING' || tries >= 40) {
-                    clearInterval(po.poll);
-                    loadPayouts();
-                }
-            }).catch(function () {
-                clearInterval(po.poll);
-            });
-        }, 3000);
+                    show(
+                        $('poResult'),
+                        p.status === 'FAILED' ? 'bad' :
+                            (p.status === 'PENDING' ? 'wait' : ''),
+                        poStatusText(p)
+                    );
+
+                    if (p.status !== 'PENDING') {
+                        stopped = true;
+                        po.poll = null;
+                        loadPayouts();
+                        return;
+                    }
+
+                    if (tries >= maxTries) {
+                        stopPolling(
+                            'Status check paused. Your payout is still pending. ' +
+                            'Check My payouts before trying again.'
+                        );
+                        return;
+                    }
+
+                    po.poll = setTimeout(checkStatus, 3000);
+                })
+                .catch(function () {
+                    stopPolling(
+                        'Unable to check payout status. Check My payouts before retrying.'
+                    );
+                });
+        }
+
+        checkStatus();
     }
 
     function poConfirm() {
