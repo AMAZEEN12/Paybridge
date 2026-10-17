@@ -116,7 +116,8 @@ public class PayoutSettlementService {
             return settleRetrying(r);                                         // retries on only (B5)
         }
         String original = r.getReference();
-        PayoutResult result = gateway.verifyPayout(original);                 // no transaction open
+        PayoutResult result = gateway.verifyPayout(
+                original, r.getProviderPayoutRef());                 // no transaction open
         if (result.status() == PayoutStatus.NOT_FOUND) {
             return submit(original);                                          // never received: send again, same reference
         }
@@ -142,7 +143,9 @@ public class PayoutSettlementService {
         return tx.execute(status -> {
             Remittance r = lock(reference);
             if (isOpen(r)) {
-                r.setProviderPayoutRef(providerRef);
+                if (providerRef != null && !providerRef.isBlank()) {
+                    r.setProviderPayoutRef(providerRef);
+                }
                 r.setProviderStatus(PayoutStatus.PENDING.name());
                 r.setUpdatedAt(clock.instant());
                 remittances.save(r);
@@ -337,7 +340,8 @@ public class PayoutSettlementService {
             });
         }
         String retryRef = latest.getCustomerReference();
-        PayoutResult result = gateway.verifyPayout(retryRef);                 // no transaction open
+        PayoutResult result = gateway.verifyPayout(
+                retryRef, latest.getProviderPayoutRef());                // no transaction open
         if (result.status() == PayoutStatus.NOT_FOUND) {
             return sendRetry(reference, retryRef);                            // never arrived: send again, same retry reference
         }
@@ -356,11 +360,26 @@ public class PayoutSettlementService {
     private Remittance retryPending(String reference, String retryRef, String providerRef) {
         return tx.execute(status -> {
             Remittance r = lock(reference);
-            if (r.getStatus() == RemittanceStatus.RETRYING && r.getNextRetryAt() == null) {
-                r.setProviderPayoutRef(providerRef);
+
+            if (r.getStatus() == RemittanceStatus.RETRYING
+                    && r.getNextRetryAt() == null) {
+
+                if (providerRef != null && !providerRef.isBlank()) {
+                    r.setProviderPayoutRef(providerRef);
+                }
+
+                attempts.findByCustomerReference(retryRef).ifPresent(attempt -> {
+                    if (providerRef != null && !providerRef.isBlank()) {
+                        attempt.setProviderPayoutRef(providerRef);
+                    }
+                    attempt.setResult(PayoutStatus.PENDING.name());
+                    attempts.save(attempt);
+                });
+
                 r.setUpdatedAt(clock.instant());
                 remittances.save(r);
             }
+
             return r;
         });
     }

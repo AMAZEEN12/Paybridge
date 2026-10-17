@@ -54,6 +54,9 @@ public class RemittanceAttempt {
     public int getAttempt() { return attempt; }
     public String getCustomerReference() { return customerReference; }
     public String getProviderPayoutRef() { return providerPayoutRef; }
+    public void setProviderPayoutRef(String providerPayoutRef) {
+        this.providerPayoutRef = providerPayoutRef;
+    }
     public String getResult() { return result; }
     public void setResult(String result) { this.result = result; }
     public Instant getCreatedAt() { return createdAt; }

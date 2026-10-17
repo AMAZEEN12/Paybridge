@@ -194,9 +194,71 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
         }
     }
 
-
     @Override
     public PayoutResult verifyPayout(String reference) {
+        return verifyPayout(reference, null);
+    }
+
+    @Override
+    public PayoutResult verifyPayout(String reference, String providerTransferId) {
+        if (providerTransferId != null && providerTransferId.matches("\\d+")) {
+            return verifyPayoutById(reference, providerTransferId);
+        }
+
+        return verifyPayoutByReference(reference);
+    }
+
+    private PayoutResult verifyPayoutById(String reference, String providerTransferId) {
+        try {
+            Envelope<TransferData> body = send("verify payout by ID", () -> client.get()
+                    .uri("/transfers/{id}", providerTransferId)
+                    .retrieve()
+                    .onStatus(s -> s.is4xxClientError(), (req, res) -> {
+                        throw new Rejected(res.getStatusCode().value(), read(res.getBody()));
+                    })
+                    .body(new ParameterizedTypeReference<Envelope<TransferData>>() { }));
+
+            if (body == null || body.data() == null) {
+                throw new PayoutUnavailableException(
+                        "Flutterwave returned no transfer data for payout " + reference);
+            }
+
+            TransferData found = body.data();
+
+            // Never settle a payout using a provider record with a different reference.
+            if (!reference.equals(found.reference())) {
+                log.error("Flutterwave transfer ID did not match the expected payout reference {}",
+                        reference);
+                throw new PayoutUnavailableException(
+                        "Flutterwave transfer identity could not be confirmed.");
+            }
+
+            log.info("Flutterwave verification by transfer ID for payout {} returned status '{}'",
+                    reference, found.status());
+
+            return new PayoutResult(
+                    map(found.status()),
+                    providerRef(found),
+                    found.completeMessage(),
+                    false,
+                    null
+            );
+
+        } catch (Rejected e) {
+            // A known ID that cannot be fetched is NOT proof that no payout was submitted.
+            // Do not let this result trigger another payout submission.
+            log.warn("Flutterwave could not verify payout {} by transfer ID (HTTP {})",
+                    reference, e.status);
+            throw new PayoutUnavailableException(
+                    "Cannot verify the existing Flutterwave transfer right now (HTTP "
+                            + e.status + ").");
+
+        } catch (Unreachable e) {
+            throw new PayoutUnavailableException(e.getMessage());
+        }
+    }
+
+    private PayoutResult verifyPayoutByReference(String reference) {
         try {
             Envelope<List<TransferData>> body = send("verify payout", () -> client.get()
                     .uri("/transfers?reference={ref}", reference)
@@ -225,11 +287,8 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
                 );
             }
 
-            log.info(
-                    "Flutterwave verification for payout {} returned status '{}'",
-                    reference,
-                    found.status()
-            );
+            log.info("Flutterwave verification for payout {} returned status '{}'",
+                    reference, found.status());
 
             return new PayoutResult(
                     map(found.status()),
@@ -241,7 +300,7 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
 
         } catch (Rejected e) {
             if (e.status == 404) {
-                log.warn("Flutterwave verification returned HTTP 404 for payout {}", reference);
+                log.warn("Flutterwave reference lookup returned HTTP 404 for payout {}", reference);
                 return PayoutResult.of(
                         PayoutStatus.NOT_FOUND,
                         null,
@@ -249,21 +308,14 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
                 );
             }
 
-            log.warn(
-                    "Flutterwave could not verify payout {} (HTTP {})",
-                    reference,
-                    e.status
-            );
-
+            log.warn("Flutterwave could not verify payout {} (HTTP {})", reference, e.status);
             throw new PayoutUnavailableException(
-                    "Cannot verify the payout right now (HTTP " + e.status + ")."
-            );
+                    "Cannot verify the payout right now (HTTP " + e.status + ").");
 
         } catch (Unreachable e) {
             throw new PayoutUnavailableException(e.getMessage());
         }
     }
-
 
     // ---------- helpers ----------
 
