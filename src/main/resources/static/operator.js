@@ -303,12 +303,20 @@
     $('opExcAll').addEventListener('change', loadExceptions);
     $('opSweepRun').addEventListener('click', runSweep);
 
+    function setDate() {
+        if (!$('opDate').value) {
+            $('opDate').value = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        }
+    }
+
+    new MutationObserver(function () {
+        if (!$('operatorView').hidden) {
+            setDate();
+        }
+    }).observe($('operatorView'), { attributes: true, attributeFilter: ['hidden'] });
+
     window.PayBridgeOperator = {
-        open: function () {
-            if (!$('opDate').value) {
-                $('opDate').value = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-            }
-        },
+        open: setDate,
         reset: function () {
             adminKey = '';
             $('opKey').value = '';

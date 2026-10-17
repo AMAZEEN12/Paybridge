@@ -88,6 +88,13 @@
             select.appendChild(o);
         });
 
+        if (!select.options.length) {
+            var none = el('option', null, 'No active wallet. Activate one on Home first.');
+
+            none.value = '';
+            select.appendChild(none);
+        }
+
         if (before) {
             select.value = before;
         }
@@ -345,6 +352,12 @@
 
             drawBankFields();
         }, function (e) {
+            var pick = $('poCountry');
+            var o = el('option', null, 'Payouts unavailable: ' + message(e));
+
+            clear(pick);
+            o.value = '';
+            pick.appendChild(o);
             toast(message(e), true);
         });
     }
@@ -539,21 +552,35 @@
     $('poCancel').addEventListener('click', poReset);
     $('poListBtn').addEventListener('click', loadPayouts);
 
-    window.PayBridgeAbroad = {
-        open: function () {
-            xcReset();
-            poReset();
+    var lastOpen = 0;
 
-            api('/wallets').then(function (r) {
-                wallets = r.data || [];
-                fillWallets($('xcFrom'));
-                fillWallets($('poFrom'));
-            }, function (e) {
-                toast(message(e), true);
-            });
-
-            loadDestinations();
-            loadPayouts();
+    function open() {
+        if (Date.now() - lastOpen < 500) {
+            return;                                   // the page hook and the watcher can both fire
         }
-    };
+
+        lastOpen = Date.now();
+        xcReset();
+        poReset();
+
+        api('/wallets').then(function (r) {
+            wallets = r.data || [];
+            fillWallets($('xcFrom'));
+            fillWallets($('poFrom'));
+        }, function (e) {
+            toast(message(e), true);
+        });
+
+        loadDestinations();
+        loadPayouts();
+    }
+
+    /* Load whenever the screen becomes visible, so this works even without a hook in app.js. */
+    new MutationObserver(function () {
+        if (!$('abroadView').hidden) {
+            open();
+        }
+    }).observe($('abroadView'), { attributes: true, attributeFilter: ['hidden'] });
+
+    window.PayBridgeAbroad = { open: open };
 })();

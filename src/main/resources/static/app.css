@@ -98,3 +98,39 @@ label.check { flex-direction: row; align-items: center; gap: 8px; margin-top: 8p
 label.check input { width: auto; }
 .amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .group { margin: 14px 0 0; font-size: .85rem; font-weight: 700; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+
+/* ---------- responsive layout (phones, tablets, laptops) ---------- */
+.page { width: 100%; box-sizing: border-box; }
+input, select { font-size: 16px; min-height: 44px; box-sizing: border-box; }   /* 16px stops phones zooming in */
+button { min-height: 44px; }
+
+/* quote lines on the Send abroad screen */
+#xcQuote div, #poQuote div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+#xcQuote span:last-child, #poQuote span:last-child { text-align: right; overflow-wrap: anywhere; }
+#xcQuote .total, #poQuote .total { font-weight: 700; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+
+/* phones */
+@media (max-width: 480px) {
+    .page { padding: 14px 10px 56px; }
+    .card { padding: 14px; }
+    .row.wrap button { flex: 1 1 100%; }
+}
+
+/* tablets and laptops: wider page, two columns for the busy screens */
+@media (min-width: 720px) {
+    .page { max-width: 880px; padding: 28px 24px 80px; }
+
+    #abroadView:not([hidden]),
+    #opPanels:not([hidden]) {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    #abroadView > .card:last-child { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1100px) {
+    .page { max-width: 1040px; }
+}
