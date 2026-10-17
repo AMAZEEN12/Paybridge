@@ -194,6 +194,7 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
         }
     }
 
+
     @Override
     public PayoutResult verifyPayout(String reference) {
         try {
@@ -204,24 +205,65 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
                         throw new Rejected(res.getStatusCode().value(), read(res.getBody()));
                     })
                     .body(new ParameterizedTypeReference<Envelope<List<TransferData>>>() { }));
+
             if (body == null || body.data() == null) {
+                log.warn("Flutterwave verification returned no data for payout {}", reference);
                 throw new PayoutUnavailableException("Flutterwave returned no data.");
             }
+
             TransferData found = body.data().stream()
-                    .filter(t -> reference.equals(t.reference())).findFirst().orElse(null);
+                    .filter(t -> reference.equals(t.reference()))
+                    .findFirst()
+                    .orElse(null);
+
             if (found == null) {
-                return PayoutResult.of(PayoutStatus.NOT_FOUND, null, "Flutterwave has no record of this reference");
+                log.warn("Flutterwave verification found no transfer for payout {}", reference);
+                return PayoutResult.of(
+                        PayoutStatus.NOT_FOUND,
+                        null,
+                        "Flutterwave has no record of this reference"
+                );
             }
-            return new PayoutResult(map(found.status()), providerRef(found), found.completeMessage(), false, null);
+
+            log.info(
+                    "Flutterwave verification for payout {} returned status '{}'",
+                    reference,
+                    found.status()
+            );
+
+            return new PayoutResult(
+                    map(found.status()),
+                    providerRef(found),
+                    found.completeMessage(),
+                    false,
+                    null
+            );
+
         } catch (Rejected e) {
             if (e.status == 404) {
-                return PayoutResult.of(PayoutStatus.NOT_FOUND, null, "Flutterwave has no record of this reference");
+                log.warn("Flutterwave verification returned HTTP 404 for payout {}", reference);
+                return PayoutResult.of(
+                        PayoutStatus.NOT_FOUND,
+                        null,
+                        "Flutterwave has no record of this reference"
+                );
             }
-            throw new PayoutUnavailableException("Cannot verify the payout right now (HTTP " + e.status + ").");
+
+            log.warn(
+                    "Flutterwave could not verify payout {} (HTTP {})",
+                    reference,
+                    e.status
+            );
+
+            throw new PayoutUnavailableException(
+                    "Cannot verify the payout right now (HTTP " + e.status + ")."
+            );
+
         } catch (Unreachable e) {
             throw new PayoutUnavailableException(e.getMessage());
         }
     }
+
 
     // ---------- helpers ----------
 
