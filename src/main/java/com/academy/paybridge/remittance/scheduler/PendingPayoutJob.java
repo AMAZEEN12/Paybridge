@@ -46,6 +46,10 @@ public class PendingPayoutJob {
         List<Remittance> stale = remittances.findStale(
                 EnumSet.of(RemittanceStatus.PENDING, RemittanceStatus.RETRYING),
                 clock.instant().minusSeconds(10), PageRequest.of(0, 50));
+
+        if (!stale.isEmpty()) {
+            log.info("Pending payout job found {} payout(s) to verify", stale.size());
+        }
         for (Remittance r : stale) {
             try {
                 settlement.settleFromGateway(r.getReference());
