@@ -119,7 +119,7 @@ public class PayoutSettlementService {
         PayoutResult result = gateway.verifyPayout(
                 original, r.getProviderPayoutRef());                 // no transaction open
         if (result.status() == PayoutStatus.NOT_FOUND) {
-            return submit(original);                                          // never received: send again, same reference
+            return markUnknown(original);
         }
         return apply(original, result);
     }
@@ -481,13 +481,19 @@ public class PayoutSettlementService {
 
     private void recordAttemptResult(Remittance r, int attempt, String result) {
         attempts.findByRemittanceIdOrderByAttemptAsc(r.getId()).stream()
-                .filter(a -> a.getAttempt() == attempt).findFirst()
+                .filter(a -> a.getAttempt() == attempt)
+                .findFirst()
                 .ifPresent(a -> {
                     a.setResult(result);
+
+                    if (r.getProviderPayoutRef() != null
+                            && !r.getProviderPayoutRef().isBlank()) {
+                        a.setProviderPayoutRef(r.getProviderPayoutRef());
+                    }
+
                     attempts.save(a);
                 });
     }
-
     /** A payout by its own reference, or by one of its retry references. */
     private Remittance resolve(String reference) {
         Optional<Remittance> direct = remittances.findByReference(reference);
