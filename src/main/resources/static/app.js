@@ -153,6 +153,12 @@
             headers['Authorization'] = 'Bearer ' + token;
         }
 
+        if (options.headers) {
+            Object.keys(options.headers).forEach(function (k) {
+                headers[k] = options.headers[k];
+            });
+        }
+
         if (options.key) {
             headers['Idempotency-Key'] = options.key;
         }
@@ -226,6 +232,9 @@
         me = null;
         accounts = [];
         wallets = [];
+        if (window.PayBridgeOperator) {
+            window.PayBridgeOperator.reset();
+        }
 
         clearTimeout(bellSoon);
         clearInterval(pollTimer);
@@ -249,7 +258,7 @@
 
     /* ---------- views ---------- */
 
-    var VIEWS = ['home', 'send', 'convert', 'history', 'alerts'];
+    var VIEWS = ['home', 'send', 'convert', 'history', 'alerts', 'abroad', 'operator'];
 
     function showView(name) {
         VIEWS.forEach(function (v) {
@@ -281,6 +290,12 @@
 
         if (name === 'convert' && window.PayBridgeConvert) {
             window.PayBridgeConvert.open();
+        }
+        if (name === 'operator' && window.PayBridgeOperator) {
+            window.PayBridgeOperator.open();
+        }
+        if (name === 'abroad' && window.PayBridgeAbroad) {
+            window.PayBridgeAbroad.open();
         }
     }
 

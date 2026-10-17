@@ -68,6 +68,8 @@
       <button class="tab" data-view="convert" type="button">Convert</button>
       <button class="tab" data-view="history" type="button">History</button>
       <button class="tab" data-view="alerts" type="button">Alerts</button>
+      <button class="tab" data-view="operator" type="button">Operator</button>
+      <button class="tab" data-view="abroad" type="button">Send abroad</button>
     </div>
 
     <div id="homeView" class="stack">
@@ -202,6 +204,76 @@
       <div class="result" id="convResult" hidden></div>
     </div>
 
+    <div id="abroadView" class="stack" hidden>
+      <div class="card">
+        <h2>To a PayBridge account (another currency)</h2>
+        <p class="hint">The recipient gets their own currency. You see the rate, fee and exact amount before you confirm.</p>
+        <form id="xcForm" class="form">
+          <label>From wallet <select id="xcFrom" required></select></label>
+          <label>Recipient account number
+            <input id="xcTo" type="text" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10 digits" required autocomplete="off">
+          </label>
+          <p class="resolved" id="xcWho" hidden></p>
+          <label>They receive in <select id="xcReceive" required></select></label>
+          <label>Amount you send <input id="xcAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
+          <button class="primary" id="xcQuoteBtn" type="submit">Get quote</button>
+        </form>
+        <div class="quote" id="xcQuote" hidden></div>
+        <p class="hint" id="xcCountdown" hidden></p>
+        <div class="form" id="xcActions" hidden>
+          <label>Transaction PIN
+            <input id="xcPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
+          </label>
+          <div class="row">
+            <button class="primary" id="xcConfirm" type="button">Confirm and send</button>
+            <button id="xcCancel" type="button">Cancel</button>
+          </div>
+        </div>
+        <div class="result" id="xcResult" hidden></div>
+      </div>
+
+      <div class="card">
+        <h2>To a bank in another country</h2>
+        <p class="hint">Check the account name first. The quote locks the name, fee, rate and exact amount for 30 minutes.</p>
+        <form id="poForm" class="form">
+          <label>From wallet <select id="poFrom" required></select></label>
+          <label>Country <select id="poCountry" required></select></label>
+          <label>Bank code <small>(if the country needs one)</small>
+            <input id="poBankCode" type="text" maxlength="20" autocomplete="off">
+          </label>
+          <div class="form" id="poFields"></div>
+          <label>Account number <input id="poAccount" type="text" maxlength="40" required autocomplete="off"></label>
+          <label>Recipient type
+            <select id="poType"><option value="INDIVIDUAL">Individual</option><option value="CORPORATE">Company</option></select>
+          </label>
+          <label>Purpose <select id="poPurpose" required></select></label>
+          <label>Amount you send <input id="poAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
+          <div class="row wrap">
+            <button id="poVerifyBtn" type="button">Check account name</button>
+            <button class="primary" id="poQuoteBtn" type="submit">Get quote</button>
+          </div>
+        </form>
+        <p class="resolved" id="poVerified" hidden></p>
+        <div class="quote" id="poQuote" hidden></div>
+        <p class="hint" id="poCountdown" hidden></p>
+        <div class="form" id="poActions" hidden>
+          <label>Transaction PIN
+            <input id="poPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
+          </label>
+          <div class="row">
+            <button class="primary" id="poConfirm" type="button">Confirm and send</button>
+            <button id="poCancel" type="button">Cancel</button>
+          </div>
+        </div>
+        <div class="result" id="poResult" hidden></div>
+      </div>
+
+      <div class="card">
+        <div class="row spread"><h2>My payouts</h2><button id="poListBtn" type="button">Refresh</button></div>
+        <ul class="list" id="poList"></ul>
+      </div>
+    </div>
+
     <div id="historyView" class="card" hidden>
       <h2>History</h2>
       <label>
@@ -219,10 +291,58 @@
       </div>
       <ul class="list" id="alertList"></ul>
     </div>
+
+    <div id="operatorView" class="stack" hidden>
+      <div class="card">
+        <h2>Operator</h2>
+        <p class="hint">Settlement tools. You need the operator key set on the server. It is kept in this page's memory only.</p>
+        <form id="opKeyForm" class="form row">
+          <input id="opKey" type="password" placeholder="Operator key" autocomplete="off" required>
+          <button class="primary" type="submit">Use key</button>
+        </form>
+      </div>
+
+      <div id="opPanels" class="stack" hidden>
+        <div class="card">
+          <div class="row spread"><h2>Positions</h2><button id="opPosLoad" type="button">Refresh</button></div>
+          <ul class="list" id="opWarnings"></ul>
+          <div id="opPositions"></div>
+        </div>
+
+        <div class="card">
+          <h2>Batches</h2>
+          <p class="hint">One UTC day. The Lagos clock is one hour ahead of UTC.</p>
+          <div class="row wrap">
+            <input id="opDate" type="date" aria-label="UTC day">
+            <button id="opBatchLoad" type="button">Show</button>
+            <button id="opBatchRun" type="button">Run this day</button>
+          </div>
+          <ul class="list" id="opBatches"></ul>
+        </div>
+
+        <div class="card">
+          <div class="row spread"><h2>Exceptions</h2><button id="opExcLoad" type="button">Refresh</button></div>
+          <label class="check"><input id="opExcAll" type="checkbox"> Show resolved too</label>
+          <ul class="list" id="opExceptions"></ul>
+        </div>
+
+        <div class="card">
+          <h2>Sweeps</h2>
+          <p class="hint">Moves fees to revenue and VAT and stamp duty to tax payable. Leave the currency empty to sweep everything.</p>
+          <div class="row wrap">
+            <input id="opSweepCcy" type="text" maxlength="3" placeholder="e.g. NGN" aria-label="Currency (optional)">
+            <button class="primary" id="opSweepRun" type="button">Sweep now</button>
+          </div>
+          <ul class="list" id="opSweepResult"></ul>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 
 <script src="/app.js"></script>
 <script src="/convert.js"></script>
+<script src="/operator.js"></script>
+<script src="/abroad.js"></script>
 </body>
 </html>

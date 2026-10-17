@@ -91,3 +91,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .wallet-code { flex: 1; color: var(--muted); }
 .wallet-amount { font-weight: 600; }
 .wallet-row button { padding: .15rem .5rem; font-size: .8rem; }
+
+.row.wrap { flex-wrap: wrap; }
+.row.wrap input { flex: 1; min-width: 140px; width: auto; }
+label.check { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; }
+label.check input { width: auto; }
+.amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.group { margin: 14px 0 0; font-size: .85rem; font-weight: 700; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
