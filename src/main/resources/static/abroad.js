@@ -271,7 +271,7 @@
 
     function poReset() {
         resetFlow(po, PO_IDS);
-        clearInterval(po.poll);
+        stopWatching();
         $('poPin').value = '';
     }
 
@@ -431,7 +431,7 @@
     }
 
     function poStatusText(p) {
-        if (p.status === 'COMPLETED') {
+        if (p.status === 'SUCCESSFUL') {
             return 'Paid. ' + money(p.payoutAmount, p.payoutCurrency) + ' reached the recipient. Reference ' + p.reference + '.';
         }
 
@@ -442,18 +442,30 @@
         return 'Sent to the bank network. Waiting for confirmation. Reference ' + p.reference + '.';
     }
 
-    function poWatch(reference) {
-        clearInterval(po.poll);
+    /* Only one status check may run at a time. Bumping watchId makes any check that is still in flight stop itself. */
+    function stopWatching() {
+        po.watchId = (po.watchId || 0) + 1;
+        clearTimeout(po.poll);
+        po.poll = null;
+    }
 
+    function poWatch(reference) {
+        stopWatching();
+
+        var myId = po.watchId;
         var tries = 0;
         var maxTries = 40;
         var stopped = false;
 
+        function isCurrent() {
+            return !stopped && po.watchId === myId;
+        }
+
         function stopPolling(message) {
-            if (stopped) return;
+            if (!isCurrent()) return;
 
             stopped = true;
-            clearInterval(po.poll);
+            clearTimeout(po.poll);
             po.poll = null;
 
             if (message) {
@@ -464,7 +476,7 @@
         }
 
         function checkStatus() {
-            if (stopped) return;
+            if (!isCurrent()) return;
 
             if (tries >= maxTries) {
                 stopPolling(
@@ -478,7 +490,7 @@
 
             api('/payouts/' + encodeURIComponent(reference))
                 .then(function (r) {
-                    if (stopped) return;
+                    if (!isCurrent()) return;
 
                     var p = r.data;
 
@@ -489,8 +501,10 @@
                         poStatusText(p)
                     );
 
+                    // SUCCESSFUL or FAILED: the answer is final, so stop asking.
                     if (p.status !== 'PENDING') {
                         stopped = true;
+                        clearTimeout(po.poll);
                         po.poll = null;
                         loadPayouts();
                         return;
@@ -566,7 +580,7 @@
             r.data.forEach(function (p) {
                 var li = el('li');
                 var main = el('div', 'main');
-                var kind = p.status === 'COMPLETED' ? 'ok' : (p.status === 'FAILED' ? 'bad' : 'wait');
+                var kind = p.status === 'SUCCESSFUL' ? 'ok' : (p.status === 'FAILED' ? 'bad' : 'wait');
 
                 main.appendChild(el('div', 'title', money(p.sourceAmount, p.sourceCurrency)
                     + ' to ' + money(p.payoutAmount, p.payoutCurrency)));
