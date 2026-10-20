@@ -15,6 +15,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -51,13 +59,48 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
     private final RestClient client;
     private final CurrencyRegistry currencies;
 
-    public FlutterwavePayoutGateway(PayoutProperties props, CurrencyRegistry currencies) {
+    private final boolean simulationEnabled;
+    private final long simulationSuccessAfterSeconds;
+
+    private final Map<String, SimulatedTransfer> simulatedTransfersByReference =
+            new ConcurrentHashMap<>();
+
+    private final Map<String, SimulatedTransfer> simulatedTransfersById =
+            new ConcurrentHashMap<>();
+
+    private final AtomicLong simulatedTransferSequence =
+            new AtomicLong(100_000);
+
+    public FlutterwavePayoutGateway(
+            PayoutProperties props,
+            CurrencyRegistry currencies,
+            Environment environment,
+            @Value("${paybridge.payouts.simulation.enabled:false}")
+            boolean simulationEnabled,
+            @Value("${paybridge.payouts.simulation.success-after-seconds:15}")
+            long simulationSuccessAfterSeconds) {
         PayoutProperties.Flutterwave fw = props.flutterwave();
         if (fw.secretKey() == null || fw.secretKey().isBlank()) {
             throw new IllegalStateException(
                     "FLUTTERWAVE_SECRET_KEY must be set when paybridge.payouts.provider is 'flutterwave'. Use your TEST secret key.");
         }
         this.currencies = currencies;
+
+        this.simulationEnabled = simulationEnabled;
+        this.simulationSuccessAfterSeconds = simulationSuccessAfterSeconds;
+
+        if (simulationEnabled && !simulationAllowed(environment)) {
+            throw new IllegalStateException(
+                    "Payout simulation is allowed only with the local or test "
+                            + "Spring profile, never in production."
+            );
+        }
+
+        if (simulationEnabled && simulationSuccessAfterSeconds < 1) {
+            throw new IllegalArgumentException(
+                    "Simulation success delay must be at least 1 second."
+            );
+        }
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(fw.connectTimeoutMs());
         factory.setReadTimeout(fw.readTimeoutMs());
@@ -152,6 +195,9 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
 
     @Override
     public PayoutResult initiatePayout(PayoutRequest r) {
+        if (simulationEnabled) {
+            return initiateSimulatedPayout(r);
+        }
         BigDecimal amount = BigDecimal.valueOf(r.destinationAmountMinor(),
                 currencies.require(r.destinationCurrency()).minorUnits());
         Map<String, Object> request = new LinkedHashMap<>();
@@ -196,12 +242,28 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
 
     @Override
     public PayoutResult verifyPayout(String reference) {
+        if (simulationEnabled) {
+            return verifySimulatedPayout(reference, null);
+        }
+
         return verifyPayout(reference, null);
     }
 
+
     @Override
-    public PayoutResult verifyPayout(String reference, String providerTransferId) {
-        if (providerTransferId != null && providerTransferId.matches("\\d+")) {
+    public PayoutResult verifyPayout(
+            String reference,
+            String providerTransferId) {
+
+        if (simulationEnabled) {
+            return verifySimulatedPayout(
+                    reference,
+                    providerTransferId
+            );
+        }
+
+        if (providerTransferId != null
+                && providerTransferId.matches("\\d+")) {
             return verifyPayoutById(reference, providerTransferId);
         }
 
@@ -388,4 +450,134 @@ public class FlutterwavePayoutGateway implements PayoutGateway {
         String one = text.replaceAll("\\s+", " ").trim();
         return one.length() > 200 ? one.substring(0, 200) : one;
     }
+
+    private static boolean simulationAllowed(Environment environment) {
+        boolean production = Arrays.stream(environment.getActiveProfiles())
+                .map(p -> p.toLowerCase(Locale.ROOT))
+                .anyMatch(p -> p.equals("prod") || p.equals("production"));
+
+        boolean localOrTest = Arrays.stream(environment.getActiveProfiles())
+                .map(p -> p.toLowerCase(Locale.ROOT))
+                .anyMatch(p -> p.equals("local") || p.equals("test"));
+
+        return localOrTest && !production;
+    }
+
+    private PayoutResult initiateSimulatedPayout(PayoutRequest r) {
+        SimulatedTransfer existing =
+                simulatedTransfersByReference.get(r.reference());
+
+        // Reusing a reference must reuse the same simulated transfer.
+        if (existing != null) {
+            return simulatedResult(existing);
+        }
+
+        String id = "SIM-" + simulatedTransferSequence.incrementAndGet();
+
+        SimulatedTransfer created = new SimulatedTransfer(
+                r.reference(),
+                id,
+                Instant.now()
+        );
+
+        SimulatedTransfer winner =
+                simulatedTransfersByReference.putIfAbsent(
+                        r.reference(),
+                        created
+                );
+
+        if (winner != null) {
+            return simulatedResult(winner);
+        }
+
+        simulatedTransfersById.put(id, created);
+
+        log.warn(
+                "SIMULATION: skipped real Flutterwave payout for {}. "
+                        + "Synthetic transfer ID is {}",
+                r.reference(),
+                id
+        );
+
+        return simulatedResult(created);
+    }
+
+    private PayoutResult verifySimulatedPayout(
+            String reference,
+            String providerTransferId) {
+
+        SimulatedTransfer transfer;
+
+        if (providerTransferId != null && !providerTransferId.isBlank()) {
+            transfer = simulatedTransfersById.get(providerTransferId);
+        } else {
+            transfer = simulatedTransfersByReference.get(reference);
+        }
+
+        if (transfer == null) {
+            log.warn(
+                    "SIMULATION: no stored simulated transfer for {}. "
+                            + "Keeping payout pending; no new payout will be sent.",
+                    reference
+            );
+
+            return PayoutResult.of(
+                    PayoutStatus.PENDING,
+                    providerTransferId,
+                    "Simulated transfer record not found; keeping payout pending."
+            );
+        }
+
+        if (!reference.equals(transfer.reference())) {
+            throw new PayoutUnavailableException(
+                    "Simulated transfer identity could not be confirmed."
+            );
+        }
+
+        return simulatedResult(transfer);
+    }
+
+    private PayoutResult simulatedResult(SimulatedTransfer transfer) {
+        long elapsedSeconds = Math.max(
+                0L,
+                Duration.between(
+                        transfer.initiatedAt(),
+                        Instant.now()
+                ).getSeconds()
+        );
+
+        boolean completed =
+                elapsedSeconds >= simulationSuccessAfterSeconds;
+
+        String status = completed ? "SUCCESSFUL" : "NEW";
+
+        String message = completed
+                ? "Simulation completed successfully"
+                : "Simulation transfer is still NEW";
+
+        log.info(
+                "SIMULATION: transfer lookup for payout {} "
+                        + "(transfer ID {}) returned status '{}' "
+                        + "after {} seconds",
+                transfer.reference(),
+                transfer.id(),
+                status,
+                elapsedSeconds
+        );
+
+        return new PayoutResult(
+                map(status),
+                transfer.id(),
+                message,
+                false,
+                null
+        );
+    }
+
+    private record SimulatedTransfer(
+            String reference,
+            String id,
+            Instant initiatedAt) {
+    }
+
 }

@@ -79,8 +79,17 @@ public class PayoutSettlementService {
     /** Sends the request for a reserved payout. Safe to call again: the reference never changes. */
     public Remittance submit(String reference) {
         Remittance r = load(reference);
+
         if (isFinal(r)) {
             return r;
+        }
+
+        // Never initiate another payout if the previous submission
+        // was accepted or its outcome is uncertain.
+        if (r.getProviderStatus() != null
+                || (r.getProviderPayoutRef() != null
+                && !r.getProviderPayoutRef().isBlank())) {
+            return settleFromGateway(reference);
         }
         PayoutQuoteView quote = quoteApi.find(r.getQuoteId())
                 .orElseThrow(() -> new IllegalStateException("Quote missing for payout " + reference));

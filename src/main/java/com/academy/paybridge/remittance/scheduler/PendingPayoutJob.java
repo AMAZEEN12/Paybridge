@@ -38,7 +38,12 @@ public class PendingPayoutJob {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "PT15S", initialDelayString = "PT12S")
+    @Scheduled(
+            fixedDelayString =
+                    "${paybridge.payouts.scheduler.verify-delay:PT15S}",
+            initialDelayString =
+                    "${paybridge.payouts.scheduler.initial-delay:PT12S}"
+    )
     public void verifyPending() {
         if (props.scheduler() != null && !props.scheduler().enabled()) {
             return;
