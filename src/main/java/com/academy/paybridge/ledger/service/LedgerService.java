@@ -1,6 +1,5 @@
 package com.academy.paybridge.ledger.service;
 
-import com.academy.paybridge.account.api.AccountApi;
 import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
 import com.academy.paybridge.ledger.domain.Direction;
@@ -15,7 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -26,13 +24,8 @@ import java.util.regex.Pattern;
 @Service
 public class LedgerService implements LedgerApi {
 
-    /** The older methods below (funding, transfers, payouts) are Naira only; recordJournal handles any currency. */
-    private static final String NGN = "NGN";
     private static final Pattern CURRENCY_CODE = Pattern.compile("[A-Z]{3}");
     private static final Pattern KEY_SUFFIX = Pattern.compile(":([A-Z]{3})$");
-
-    private record Line(String account, Direction direction, long kobo) {
-    }
 
     private final LedgerEntryRepository entries;
     private final Clock clock;
@@ -40,65 +33,6 @@ public class LedgerService implements LedgerApi {
     public LedgerService(LedgerEntryRepository entries, Clock clock) {
         this.entries = entries;
         this.clock = clock;
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void recordFunding(String accountNumber, long kobo) {
-        post("FUND:" + UUID.randomUUID(), null, "FUNDING", List.of(
-                new Line(EXT_FUNDING, Direction.DEBIT, kobo),
-                new Line(accountNumber, Direction.CREDIT, kobo)));
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void recordInternal(String reference, String source, String destination,
-                               long amountKobo, long feeKobo, long vatKobo, long stampDutyKobo) {
-        List<Line> lines = new ArrayList<>();
-        lines.add(new Line(source, Direction.DEBIT, amountKobo + feeKobo + vatKobo + stampDutyKobo));
-        lines.add(new Line(destination, Direction.CREDIT, amountKobo));
-        addCharges(lines, feeKobo, vatKobo, stampDutyKobo);
-        post(reference + ":INTERNAL", reference, "TRANSFER", lines);
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void recordReserve(String reference, String source, long totalDebitKobo) {
-        post(reference + ":RESERVE", reference, "RESERVE", List.of(
-                new Line(source, Direction.DEBIT, totalDebitKobo),
-                new Line(EXT_IN_FLIGHT, Direction.CREDIT, totalDebitKobo)));
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void recordPayoutSuccess(String reference, long amountKobo, long feeKobo, long vatKobo,
-                                    long stampDutyKobo) {
-        List<Line> lines = new ArrayList<>();
-        lines.add(new Line(EXT_IN_FLIGHT, Direction.DEBIT,
-                amountKobo + feeKobo + vatKobo + stampDutyKobo));
-        lines.add(new Line(EXT_PAID_OUT, Direction.CREDIT, amountKobo));
-        addCharges(lines, feeKobo, vatKobo, stampDutyKobo);
-        post(reference + ":PAYOUT", reference, "PAYOUT", lines);
-    }
-
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void recordPayoutRefund(String reference, String source, long totalDebitKobo) {
-        post(reference + ":REFUND", reference, "REFUND", List.of(
-                new Line(EXT_IN_FLIGHT, Direction.DEBIT, totalDebitKobo),
-                new Line(source, Direction.CREDIT, totalDebitKobo)));
-    }
-
-    private static void addCharges(List<Line> lines, long fee, long vat, long stamp) {
-        if (fee > 0) {
-            lines.add(new Line(AccountApi.FEE_ACCOUNT, Direction.CREDIT, fee));
-        }
-        if (vat > 0) {
-            lines.add(new Line(AccountApi.VAT_ACCOUNT, Direction.CREDIT, vat));
-        }
-        if (stamp > 0) {
-            lines.add(new Line(AccountApi.STAMP_DUTY_ACCOUNT, Direction.CREDIT, stamp));
-        }
     }
 
     @Override
@@ -129,19 +63,6 @@ public class LedgerService implements LedgerApi {
         postJournal("CONV:" + quoteId, quoteId, "CONVERSION", lines);
     }
 
-
-    /** The Naira-only methods convert real accounts to NGN wallet keys; EXT: accounts keep their names. */
-    private void post(String journalKey, String reference, String type, List<Line> lines) {
-        List<JournalLine> converted = new ArrayList<>();
-        for (Line l : lines) {
-            converted.add(new JournalLine(
-                    LedgerApi.walletKey(l.account(), NGN),
-                    l.direction() == Direction.DEBIT ? JournalLine.Side.DEBIT : JournalLine.Side.CREDIT,
-                    NGN,
-                    l.kobo()));
-        }
-        postJournal(journalKey, reference, type, converted);
-    }
 
     /**
      * Refuses to save a journal in which any currency's two sides differ.

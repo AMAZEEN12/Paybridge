@@ -6,6 +6,7 @@ import com.academy.paybridge.customer.api.CustomerApi;
 import com.academy.paybridge.fx.api.RateApi;
 import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
+import com.academy.paybridge.ledger.api.NairaJournals;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.config.AppProperties;
 import com.academy.paybridge.shared.exception.ApiException;
@@ -256,7 +257,8 @@ public class TransferService {
         transfers.save(t);
 
         if (naira) {
-            ledger.recordInternal(
+            NairaJournals.internal(
+                    ledger,
                     t.getReference(),
                     source,
                     destination,
@@ -486,7 +488,7 @@ public class TransferService {
 
         transfers.save(t);
 
-        ledger.recordReserve(t.getReference(), source, total);
+        NairaJournals.reserve(ledger, t.getReference(), source, total);
 
         audit.record(
                 actor,

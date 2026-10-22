@@ -51,5 +51,16 @@ services:
       # or set PAYSTACK_RESOLVE_MODE = live for real names (Paystack test mode allows about 3 a day; the app counts them).
       # To switch off the "Add test money" button on a public deployment:
       #   PAYBRIDGE_DEV_FUNDING_ENABLED = false
+      # Payouts abroad go through Flutterwave. Use the TEST secret key (FLWSECK_TEST-...) while testing.
+      - key: PAYBRIDGE_PAYOUT_PROVIDER
+        value: flutterwave
+      - key: FLUTTERWAVE_SECRET_KEY
+        sync: false
+      - key: FLUTTERWAVE_WEBHOOK_SECRET
+        sync: false                  # same value as the secret hash in the Flutterwave dashboard
+      # Optional, add in the dashboard when needed:
+      #   FLUTTERWAVE_VERIFY_MODE = live                 (real account name lookups; default is auto)
+      #   FLUTTERWAVE_SIMULATE_SUCCESS_AFTER = PT15S     (TEST key only: a pending payout turns successful after 15 seconds)
+      # Settlement: setting the admin key switches the settlement endpoints on. Leave it empty to keep them off.
       - key: PAYBRIDGE_SETTLEMENT_ADMIN_KEY
         sync: false

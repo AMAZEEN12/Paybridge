@@ -1,6 +1,7 @@
 package com.academy.paybridge.ledger;
 
 import com.academy.paybridge.ledger.api.JournalLine;
+import com.academy.paybridge.ledger.api.NairaJournals;
 import com.academy.paybridge.ledger.domain.Direction;
 import com.academy.paybridge.ledger.domain.LedgerEntry;
 import com.academy.paybridge.ledger.repository.LedgerEntryRepository;
@@ -104,7 +105,7 @@ class LedgerJournalTest {
 
     @Test
     void theNairaMethodsStillWriteNairaWalletKeys() {
-        ledger.recordFunding("2000000001", 5_000);
+        NairaJournals.funding(ledger, "2000000001", 5_000);
 
         assertThat(saved).extracting(LedgerEntry::getAccountNumber).containsExactly("EXT:FUNDING", "2000000001:NGN");
         assertThat(saved).extracting(LedgerEntry::getCurrency).containsOnly("NGN");

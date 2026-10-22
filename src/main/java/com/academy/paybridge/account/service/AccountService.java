@@ -13,6 +13,7 @@ import com.academy.paybridge.account.repository.AccountRepository;
 import com.academy.paybridge.account.repository.WalletRepository;
 import com.academy.paybridge.ledger.api.JournalLine;
 import com.academy.paybridge.ledger.api.LedgerApi;
+import com.academy.paybridge.ledger.api.NairaJournals;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.CurrencyRegistry;
@@ -115,7 +116,7 @@ public class AccountService implements AccountApi {
     public AccountView devFund(String accountNumber, Long customerId, long kobo) {
         getOwned(accountNumber, customerId);
         credit(accountNumber, "NGN", kobo);
-        ledger.recordFunding(accountNumber, kobo);
+        NairaJournals.funding(ledger, accountNumber, kobo);
         audit.record("customer:" + customerId, "DEV_FUNDING", null,
                 "account " + Money.maskAccount(accountNumber) + " +" + kobo + " kobo");
         return view(accounts.findByAccountNumber(accountNumber).orElseThrow());

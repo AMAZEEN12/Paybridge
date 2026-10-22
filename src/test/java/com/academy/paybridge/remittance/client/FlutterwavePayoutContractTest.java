@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.env.StandardEnvironment;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -46,7 +47,8 @@ class FlutterwavePayoutGatewayContractTest {
         var registry = new CurrencyRegistry(List.of(
                 new CurrencyInfo("NGN", "Naira", "N", 2, true),
                 new CurrencyInfo("USD", "Dollar", "$", 2, true)), List.of());
-        gateway = new FlutterwavePayoutGateway(props, registry);
+        // No active profile and simulation switched off: this test talks to the local fake HTTP server only.
+        gateway = new FlutterwavePayoutGateway(props, registry, new StandardEnvironment(), false, 15L);
     }
 
     @AfterEach

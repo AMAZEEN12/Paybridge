@@ -2,6 +2,7 @@ package com.academy.paybridge.transfer.service;
 
 import com.academy.paybridge.account.api.AccountApi;
 import com.academy.paybridge.ledger.api.LedgerApi;
+import com.academy.paybridge.ledger.api.NairaJournals;
 import com.academy.paybridge.shared.audit.AuditService;
 import com.academy.paybridge.shared.exception.ApiException;
 import com.academy.paybridge.shared.money.Money;
@@ -156,18 +157,18 @@ public class TransferSettlementService {
                 if (t.getFeeMinor() > 0)       { accounts.credit(AccountApi.FEE_ACCOUNT, NGN, t.getFeeMinor()); }
                 if (t.getVatMinor() > 0)       { accounts.credit(AccountApi.VAT_ACCOUNT, NGN, t.getVatMinor()); }
                 if (t.getStampDutyMinor() > 0) { accounts.credit(AccountApi.STAMP_DUTY_ACCOUNT, NGN, t.getStampDutyMinor()); }
-                ledger.recordPayoutSuccess(reference, t.getAmountMinor(), t.getFeeMinor(), t.getVatMinor(), t.getStampDutyMinor());
+                NairaJournals.payoutSuccess(ledger, reference, t.getAmountMinor(), t.getFeeMinor(), t.getVatMinor(), t.getStampDutyMinor());
                 t.setStatus(TransferStatus.SUCCESSFUL);
                 t.setNote(null);
                 audit.record("paystack", "TRANSFER_SUCCESSFUL", reference, null);
             } else {
                 accounts.credit(t.getSourceAccountNumber(), NGN, t.getTotalDebitMinor());   // the refund, charges included
-                ledger.recordPayoutRefund(reference, t.getSourceAccountNumber(), t.getTotalDebitMinor());
+                NairaJournals.payoutRefund(ledger, reference, t.getSourceAccountNumber(), t.getTotalDebitMinor());
 
                 t.setStatus(TransferStatus.FAILED);
                 t.setNote(reason == null ? "Payout failed" : reason);
                 audit.record("system", "TRANSFER_FAILED_REFUNDED", reference,
-                         "refunded " + Money.format(t.getTotalDebitMinor()));
+                        "refunded " + Money.format(t.getTotalDebitMinor()));
             }
             t.setUpdatedAt(clock.instant());
             transfers.save(t);

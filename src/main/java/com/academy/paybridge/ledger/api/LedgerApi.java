@@ -8,9 +8,8 @@ import java.util.List;
  * Every method joins the caller's database transaction (it refuses to run without one), so the balance change
  * and its ledger lines are saved together or not at all.
  *
- * The kobo methods (recordFunding, recordInternal, recordReserve, recordPayoutSuccess, recordPayoutRefund) are the
- * Naira transfer postings. They stay until Intent 002 (cross-border transfers) makes transfers currency-aware.
- * New work uses recordJournal or recordConversion.
+ * Everything is posted through recordJournal (or recordConversion for a conversion). The Naira postings
+ * (funding, internal transfer, reserve, payout success, payout refund) are built by {@link NairaJournals}.
  */
 public interface LedgerApi {
 
@@ -19,22 +18,6 @@ public interface LedgerApi {
     String EXT_FUNDING = "EXT:FUNDING";
     String EXT_IN_FLIGHT = "EXT:IN_FLIGHT";
     String EXT_PAID_OUT = "EXT:PAID_OUT";
-
-    /** Money added from outside (development funding). */
-    void recordFunding(String accountNumber, long kobo);
-
-    /** Internal transfer: source pays amount + charges; destination and the charge accounts are credited. */
-    void recordInternal(String reference, String source, String destination,
-                        long amountKobo, long feeKobo, long vatKobo, long stampDutyKobo);
-
-    /** Payout reserved: the customer is debited and the money waits in EXT:IN_FLIGHT. */
-    void recordReserve(String reference, String source, long totalDebitKobo);
-
-    /** Payout confirmed: EXT:IN_FLIGHT is released to EXT:PAID_OUT and the charge accounts. */
-    void recordPayoutSuccess(String reference, long amountKobo, long feeKobo, long vatKobo, long stampDutyKobo);
-
-    /** Payout failed: EXT:IN_FLIGHT goes back to the customer, charges included. */
-    void recordPayoutRefund(String reference, String source, long totalDebitKobo);
 
     /**
      * Posts one journal that may involve several currencies (for example a conversion).

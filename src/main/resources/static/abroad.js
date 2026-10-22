@@ -281,6 +281,22 @@
         return dest.countries.filter(function (c) { return c.code === code; })[0];
     }
 
+    /* Sets the text shown before an input inside its label (the input itself is left alone). */
+    function setLabelText(inputId, text) {
+        var label = $(inputId).parentNode;
+        var hint = label.querySelector('small');
+
+        label.firstChild.nodeValue = text + ' ';
+
+        if (hint) {
+            hint.hidden = true;
+        }
+    }
+
+    function bankField(c, name) {
+        return c.bankFields.filter(function (f) { return f.name === name; })[0];
+    }
+
     function drawBankFields() {
         var box = $('poFields');
         var c = country();
@@ -291,7 +307,28 @@
             return;
         }
 
+        // The form already has ONE Account number box and ONE Bank code box. The country only changes their
+        // labels (IBAN, Sort code, Routing number...) and says whether a bank code is needed at all.
+        var account = bankField(c, 'accountNumber');
+        var code = bankField(c, 'bankCode');
+
+        setLabelText('poAccount', account ? account.label : 'Account number');
+
+        $('poBankCode').parentNode.hidden = !code;
+        $('poBankCode').required = !!(code && code.required);
+
+        if (code) {
+            setLabelText('poBankCode', code.label);
+        } else {
+            $('poBankCode').value = '';
+        }
+
+        // Any other field the country asks for is drawn here.
         c.bankFields.forEach(function (f) {
+            if (f.name === 'accountNumber' || f.name === 'bankCode') {
+                return;
+            }
+
             var label = el('label', null, f.label + (f.required ? '' : ' (optional)'));
             var input = el('input');
 
