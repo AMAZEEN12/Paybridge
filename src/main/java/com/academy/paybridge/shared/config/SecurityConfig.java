@@ -20,7 +20,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // the small web page
                         .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/convert.js", "/abroad.js",
-                                "/operator.js", "/favicon.ico", "/error").permitAll()
+                                "/funding.js", "/operator.js", "/favicon.ico", "/error").permitAll()
                         // register, log in, and Paystack's webhook (protected by its own signature)
                         .requestMatchers("/api/v1/auth/**", "/api/v1/webhooks/paystack",
                                 "/api/v1/webhooks/flutterwave").permitAll()

@@ -26,13 +26,15 @@ public class WalletService {
     private final WalletRepository wallets;
     private final CurrencyRegistry currencies;
     private final AuditService audit;
+    private final FundingDetailsService fundingDetails;
 
     public WalletService(AccountRepository accounts, WalletRepository wallets, CurrencyRegistry currencies,
-                         AuditService audit) {
+                         AuditService audit, FundingDetailsService fundingDetails) {
         this.accounts = accounts;
         this.wallets = wallets;
         this.currencies = currencies;
         this.audit = audit;
+        this.fundingDetails = fundingDetails;
     }
 
     /**
@@ -80,6 +82,7 @@ public class WalletService {
             Wallet created = new Wallet(account, target, false);
             account.addWallet(created);
             wallets.save(created);
+            fundingDetails.ensure(account, created);   // a new wallet gets its account details straight away
             audit.record(who, "WALLET_ACTIVATED", null, where + target);
         }
         return WalletQueryService.viewsOf(account);
