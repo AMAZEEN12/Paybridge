@@ -1439,3 +1439,5 @@ button.secondary:hover {
 .receive-copy:hover { background: #f1f5f9; }
 .receive-sim { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px dashed var(--border-subtle); }
 .receive-sim input { width: 90px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
+
+.wallet-acct-no { font-size: 0.78rem; color: #64748b; font-variant-numeric: tabular-nums; margin: 2px 0 8px; word-break: break-all; }

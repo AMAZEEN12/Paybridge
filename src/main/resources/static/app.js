@@ -68,6 +68,7 @@
     var me = null;
     var accounts = [];
     var wallets = [];
+    var fundingByCcy = {};
     var currencyList = [];
     var banks = [];
     var sendKey = null;
@@ -379,14 +380,23 @@
                 return [];
             });
 
+        var fundingCall = api('/wallets/funding-details').then(function (r) {
+            return r.data || [];
+        }, function () {
+            return [];
+        });
+
         return Promise.all([
             api('/accounts'),
             walletsCall,
-            currenciesCall
+            currenciesCall,
+            fundingCall
         ]).then(function (res) {
             accounts = res[0].data || [];
             wallets = res[1];
             currencyList = res[2];
+            fundingByCcy = {};
+            res[3].forEach(function (d) { fundingByCcy[d.currency] = d; });
             renderAccounts();
         }, function (e) {
             toast(friendly(e), true);
@@ -555,6 +565,11 @@
         card.appendChild(top);
 
         card.appendChild(el('div', 'wallet-balance-amount', w.display || moneyIn(w.balance, w.currency)));
+        var fd = fundingByCcy[w.currency];
+        if (fd) {
+            card.appendChild(el('div', 'wallet-acct-no',
+                fd.bankName + ' · ' + fd.accountNumber + (fd.routingValue ? ' · ' + fd.routingValue : '')));
+        }
 
         function select() {
             selectedCurrency = w.currency;
@@ -592,9 +607,8 @@
         detailsBtn.type = 'button';
         detailsBtn.addEventListener('click', function (e) {
             e.stopPropagation();
-            if (window.PayBridgeFunding && accounts.length) {
-                window.PayBridgeFunding.show(w.currency, accounts[0].accountNumber, loadAccounts);
-            }
+            var p = $('receivePanel');
+            if (p) p.scrollIntoView({ behavior: 'smooth' });
         });
         actions.appendChild(detailsBtn);
 
