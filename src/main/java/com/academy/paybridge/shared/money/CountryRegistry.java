@@ -1,7 +1,9 @@
 package com.academy.paybridge.shared.money;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +34,14 @@ public final class CountryRegistry {
     /** The country, only if customers there can sign up (R-CTY-2). */
     public Optional<CountryInfo> supported(String code) {
         return find(code).filter(c -> currencies.isUsable(c.currencyCode()));
+    }
+
+    /** All countries whose home currency is usable and enabled. */
+    public List<CountryInfo> allSupported() {
+        return byCode.values().stream()
+                .filter(c -> currencies.isUsable(c.currencyCode()))
+                .sorted(Comparator.comparing(CountryInfo::name))
+                .toList();
     }
 
     private static String normalise(String code) {

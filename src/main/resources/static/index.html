@@ -2,343 +2,513 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PayBridge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>PayBridge | Tomorrow's Banking Is Here</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand">PayBridge</div>
-  <nav class="who" id="who" hidden>
-    <button class="icon" id="bell" type="button" aria-label="Notifications">
-      &#128276;<span class="badge" id="badge" hidden>0</span>
-    </button>
-    <span id="whoName"></span>
-    <button class="link" id="logout" type="button">Log out</button>
-  </nav>
-</header>
-
-<main class="page">
+<div class="app-viewport">
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- Signed out -->
-  <section id="authView" class="card narrow">
-    <div class="tabs" role="tablist">
-      <button class="tab active" id="tabLogin" type="button" role="tab">Sign in</button>
-      <button class="tab" id="tabRegister" type="button" role="tab">Create account</button>
+  <!-- Signed out (Landing / Auth Screen matching the left screen) -->
+  <section id="authView" class="auth-screen">
+    <div class="auth-hero">
+      <div class="brand-asterisk" aria-hidden="true">
+        <svg viewBox="0 0 100 100" class="starburst-icon">
+          <line x1="50" y1="10" x2="50" y2="90" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+          <line x1="10" y1="50" x2="90" y2="50" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+          <line x1="22" y1="22" x2="78" y2="78" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+          <line x1="22" y1="78" x2="78" y2="22" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <div class="auth-titles" id="landingHero">
+        <h1 class="headline">TOMORROW'S<br>BANKING IS HERE</h1>
+        <p class="subheadline">Experience banking reimagined for the digital age &mdash; secure, intuitive, and built for the way you live today.</p>
+
+        <div class="auth-cta-stack">
+          <button class="btn-pill-white" id="btnShowRegister" type="button">Become a Customer</button>
+          <button class="btn-link-white" id="btnShowLogin" type="button">I Am Already a Customer</button>
+        </div>
+      </div>
+
+      <!-- Auth Form Container (slides in when user clicks either option) -->
+      <div class="auth-form-card card" id="authFormBox" hidden>
+        <div class="tabs" role="tablist">
+          <button class="tab active" id="tabLogin" type="button" role="tab">Sign in</button>
+          <button class="tab" id="tabRegister" type="button" role="tab">Create account</button>
+        </div>
+
+        <form id="loginForm" class="form">
+          <label>
+            Email
+            <input id="loginEmail" type="email" autocomplete="username" placeholder="name@example.com" required>
+          </label>
+          <label>
+            Password
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          </label>
+          <button class="primary" type="submit">Sign in</button>
+        </form>
+
+        <form id="registerForm" class="form" hidden>
+          <label>
+            Full name
+            <input id="regName" type="text" autocomplete="name" placeholder="John Williams" required maxlength="120">
+          </label>
+          <label>
+            Email
+            <input id="regEmail" type="email" autocomplete="email" placeholder="john@example.com" required>
+          </label>
+          <label>
+            Password <small>(8+ characters)</small>
+            <input id="regPassword" type="password" autocomplete="new-password"
+                   required minlength="8" maxlength="72" placeholder="At least 8 characters">
+          </label>
+          <button class="primary" type="submit">Create account</button>
+        </form>
+
+        <button class="link auth-back-btn" id="btnBackToLanding" type="button">&larr; Back to overview</button>
+        <p class="hint center">Demo environment. 50 currencies supported.</p>
+      </div>
     </div>
-
-    <form id="loginForm" class="form">
-      <label>
-        Email
-        <input id="loginEmail" type="email" autocomplete="username" required>
-      </label>
-      <label>
-        Password
-        <input id="loginPassword" type="password" autocomplete="current-password" required>
-      </label>
-      <button class="primary" type="submit">Sign in</button>
-    </form>
-
-    <form id="registerForm" class="form" hidden>
-      <label>
-        Full name
-        <input id="regName" type="text" autocomplete="name" required maxlength="120">
-      </label>
-      <label>
-        Email
-        <input id="regEmail" type="email" autocomplete="email" required>
-      </label>
-      <label>
-        Password <small>(8 characters or more)</small>
-        <input id="regPassword" type="password" autocomplete="new-password"
-               required minlength="8" maxlength="72">
-      </label>
-      <button class="primary" type="submit">Create account</button>
-    </form>
-
-    <p class="hint">Demo app. Money here is test money.</p>
   </section>
 
-  <!-- Signed in -->
+  <!-- Signed in (Dashboard matching the right screen) -->
   <section id="appView" hidden>
-    <div class="tabs" role="tablist">
-      <button class="tab active" data-view="home" type="button">Home</button>
-      <button class="tab" data-view="send" type="button">Send money</button>
-      <button class="tab" data-view="convert" type="button">Convert</button>
-      <button class="tab" data-view="history" type="button">History</button>
-      <button class="tab" data-view="alerts" type="button">Alerts</button>
-      <button class="tab" data-view="operator" type="button">Operator</button>
-      <button class="tab" data-view="abroad" type="button">Send abroad</button>
-    </div>
-
-    <div id="homeView" class="stack">
-      <div class="card" id="pinCard" hidden>
-        <h2>Set your transaction PIN</h2>
-        <p class="hint">You need a 4-digit PIN to send money. It is separate from your password.</p>
-        <form id="pinForm" class="form row">
-          <input id="pinNew" type="password" inputmode="numeric"
-                 pattern="\d{4}" maxlength="4" placeholder="4 digits"
-                 autocomplete="off" required>
-          <button class="primary" type="submit">Save PIN</button>
-        </form>
+    <!-- Top Mobile / App Header -->
+    <header class="app-topbar">
+      <div class="search-pill">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" placeholder="Search transactions, recipients..." id="globalSearch" aria-label="Search">
       </div>
 
-      <div id="accountList" class="stack"></div>
+      <nav class="topbar-actions" id="who">
+        <button class="icon-btn" id="chatBtn" type="button" aria-label="Messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
 
-      <div class="card" id="swapCard" hidden>
-        <h2>Swap a wallet</h2>
-        <p class="hint">
-          You can keep up to 4 active wallets. Your home wallet cannot be swapped.
-          A parked wallet keeps its balance and can still receive money.
-        </p>
-        <form id="swapForm" class="form">
+        <button class="icon-btn" id="bell" type="button" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span class="badge" id="badge" hidden>0</span>
+        </button>
+
+        <div class="user-chip">
+          <span class="user-avatar" id="userAvatar">U</span>
+          <span id="whoName" hidden></span>
+          <button class="logout-icon" id="logout" type="button" title="Log out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Multi-Currency Wallet Bar (Horizontal Flag Chips) -->
+    <div class="wallet-strip-container">
+      <div class="wallet-strip" id="walletStrip">
+        <!-- Dynamically rendered currency chips with flag, code, and balance -->
+      </div>
+    </div>
+
+    <!-- Main Hero Balance Display & Card Selector -->
+    <div class="hero-balance-section">
+      <div class="hero-balance-label">Total Balance</div>
+      <div class="hero-balance-amount" id="heroBalance">$0.00</div>
+      <div class="hero-account-sub" id="heroAccountNumber">Account &bull;&bull;&bull;&bull;</div>
+
+      <!-- Mini Card Preview Carousel -->
+      <div class="card-preview-row">
+        <div class="mini-card black-card" title="PayBridge Virtual Card">
+          <svg viewBox="0 0 100 100" class="mini-star">
+            <line x1="50" y1="15" x2="50" y2="85" stroke="#fff" stroke-width="10"/>
+            <line x1="15" y1="50" x2="85" y2="50" stroke="#fff" stroke-width="10"/>
+            <line x1="25" y1="25" x2="75" y2="75" stroke="#fff" stroke-width="10"/>
+            <line x1="25" y1="75" x2="75" y2="25" stroke="#fff" stroke-width="10"/>
+          </svg>
+          <span class="chip-dot"></span>
+        </div>
+        <div class="mini-card white-card" title="PayBridge Physical Card">
+          <svg viewBox="0 0 100 100" class="mini-star">
+            <line x1="50" y1="15" x2="50" y2="85" stroke="#000" stroke-width="10"/>
+            <line x1="15" y1="50" x2="85" y2="50" stroke="#000" stroke-width="10"/>
+            <line x1="25" y1="25" x2="75" y2="75" stroke="#000" stroke-width="10"/>
+            <line x1="25" y1="75" x2="75" y2="25" stroke="#000" stroke-width="10"/>
+          </svg>
+          <span class="chip-dot dark"></span>
+        </div>
+        <button class="mini-card add-card-btn" id="btnQuickAddWallet" type="button" title="Add or Swap Wallet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Quick Action Buttons matching the reference image -->
+    <div class="quick-actions-grid">
+      <button class="action-tile" id="actionBtnAdd" type="button">
+        <div class="action-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <span class="action-label">ADD</span>
+      </button>
+
+      <button class="action-tile" id="actionBtnSend" type="button">
+        <div class="action-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+          </svg>
+        </div>
+        <span class="action-label">SEND</span>
+      </button>
+
+      <button class="action-tile" id="actionBtnConvert" type="button">
+        <div class="action-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+            <polyline points="17 14 12 9 7 14"></polyline>
+          </svg>
+        </div>
+        <span class="action-label">CONVERT</span>
+      </button>
+
+      <button class="action-tile" id="actionBtnMore" type="button">
+        <div class="action-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="5" cy="12" r="2"></circle>
+            <circle cx="12" cy="12" r="2"></circle>
+            <circle cx="19" cy="12" r="2"></circle>
+          </svg>
+        </div>
+        <span class="action-label">MORE</span>
+      </button>
+    </div>
+
+    <!-- Navigation Pills Bar (Tabs) -->
+    <div class="nav-pills-scroll">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-view="home" type="button">Overview</button>
+        <button class="tab" data-view="send" type="button">Send money</button>
+        <button class="tab" data-view="convert" type="button">Convert</button>
+        <button class="tab" data-view="abroad" type="button">Send abroad</button>
+        <button class="tab" data-view="history" type="button">History</button>
+        <button class="tab" data-view="alerts" type="button">Alerts</button>
+        <button class="tab" data-view="operator" type="button">Operator</button>
+      </div>
+    </div>
+
+    <!-- Bottom White Sheet (Houses all active views and the Transactions feed) -->
+    <div class="sheet-container">
+      <!-- Overview / Home View -->
+      <div id="homeView" class="stack">
+        <div class="card" id="pinCard" hidden>
+          <h2>Set your transaction PIN</h2>
+          <p class="hint">You need a 4-digit PIN to send money. It is separate from your password.</p>
+          <form id="pinForm" class="form row">
+            <input id="pinNew" type="password" inputmode="numeric"
+                   pattern="\d{4}" maxlength="4" placeholder="4 digits"
+                   autocomplete="off" required>
+            <button class="primary" type="submit">Save PIN</button>
+          </form>
+        </div>
+
+        <div id="accountList" class="stack" hidden></div>
+
+        <!-- Transactions Section matching reference design -->
+        <div class="transactions-section">
+          <div class="row spread align-center mb-2">
+            <h2 class="section-title">Transactions</h2>
+            <button class="link-viewall" id="btnViewAllTransactions" type="button">View all</button>
+          </div>
+
+          <div class="date-group-label">Today</div>
+          <ul class="clean-transaction-list" id="feedList">
+            <!-- Dynamic transactions with rich icons, descriptions, and counter amounts -->
+          </ul>
+        </div>
+
+        <!-- Swap wallet card -->
+        <div class="card" id="swapCard" hidden>
+          <h2>Swap an active wallet</h2>
+          <p class="hint">
+            You can keep up to 4 active wallets. Your home wallet cannot be swapped.
+            A parked wallet keeps its balance and can still receive money.
+          </p>
+          <form id="swapForm" class="form">
+            <label>
+              Activate this currency
+              <select id="swapCurrency"></select>
+            </label>
+            <label id="swapParkLabel" hidden>
+              Park this wallet to make room
+              <select id="swapPark"></select>
+            </label>
+            <button class="primary" type="submit">Swap</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Send Money View -->
+      <div id="sendView" class="card inner-panel" hidden>
+        <h2>Send money</h2>
+
+        <form id="sendForm" class="form">
           <label>
-            Activate this currency
-            <select id="swapCurrency"></select>
+            From
+            <select id="sendFrom" required></select>
           </label>
-          <label id="swapParkLabel" hidden>
-            Park this wallet to make room
-            <select id="swapPark"></select>
+
+          <div class="segmented" role="radiogroup" aria-label="Where to">
+            <label>
+              <input type="radio" name="kind" value="INTERNAL" checked>
+              To a PayBridge account
+            </label>
+            <label>
+              <input type="radio" name="kind" value="EXTERNAL">
+              To a bank
+            </label>
+          </div>
+
+          <label id="bankRow" hidden>
+            Bank
+            <select id="sendBank">
+              <option value="">Choose a bank</option>
+            </select>
           </label>
-          <button class="primary" type="submit">Swap</button>
-        </form>
-      </div>
-    </div>
 
-    <div id="sendView" class="card" hidden>
-      <h2>Send money</h2>
-
-      <form id="sendForm" class="form">
-        <label>
-          From
-          <select id="sendFrom" required></select>
-        </label>
-
-        <div class="segmented" role="radiogroup" aria-label="Where to">
           <label>
-            <input type="radio" name="kind" value="INTERNAL" checked>
-            To a PayBridge account
+            Account number
+            <input id="sendTo" type="text" inputmode="numeric"
+                   pattern="\d{10}" maxlength="10" placeholder="10 digits"
+                   required autocomplete="off">
+          </label>
+
+          <p class="resolved" id="resolved" hidden></p>
+
+          <label id="currencyRow">
+            Currency
+            <select id="sendCurrency" required></select>
+          </label>
+
+          <label>
+            Amount <span id="sendCcy">(&#8358;)</span>
+            <input id="sendAmount" type="number" min="0.01" step="0.01"
+                   inputmode="decimal" required>
+          </label>
+
+          <label>
+            Narration <small>(optional)</small>
+            <input id="sendNarration" type="text" maxlength="140">
+          </label>
+
+          <div class="quote" id="quote" hidden></div>
+
+          <label>
+            Transaction PIN
+            <input id="sendPin" type="password" inputmode="numeric"
+                   pattern="\d{4}" maxlength="4" autocomplete="off" required>
+          </label>
+
+          <button class="primary" id="sendButton" type="submit">Send</button>
+        </form>
+
+        <div class="result" id="sendResult" hidden></div>
+      </div>
+
+      <!-- Convert View -->
+      <div id="convertView" class="card inner-panel" hidden>
+        <h2>Convert money</h2>
+        <p class="hint" id="convHint" hidden></p>
+
+        <form id="convertForm" class="form">
+          <label>
+            From
+            <select id="convFrom" required></select>
           </label>
           <label>
-            <input type="radio" name="kind" value="EXTERNAL">
-            To a bank
+            To
+            <select id="convTo" required></select>
           </label>
-        </div>
-
-        <label id="bankRow" hidden>
-          Bank
-          <select id="sendBank">
-            <option value="">Choose a bank</option>
-          </select>
-        </label>
-
-        <label>
-          Account number
-          <input id="sendTo" type="text" inputmode="numeric"
-                 pattern="\d{10}" maxlength="10" placeholder="10 digits"
-                 required autocomplete="off">
-        </label>
-
-        <p class="resolved" id="resolved" hidden></p>
-
-        <label id="currencyRow">
-          Currency
-          <select id="sendCurrency" required></select>
-        </label>
-
-        <label>
-          Amount <span id="sendCcy">(&#8358;)</span>
-          <input id="sendAmount" type="number" min="0.01" step="0.01"
-                 inputmode="decimal" required>
-        </label>
-
-        <label>
-          Narration <small>(optional)</small>
-          <input id="sendNarration" type="text" maxlength="140">
-        </label>
-
-        <div class="quote" id="quote" hidden></div>
-
-        <label>
-          Transaction PIN
-          <input id="sendPin" type="password" inputmode="numeric"
-                 pattern="\d{4}" maxlength="4" autocomplete="off" required>
-        </label>
-
-        <button class="primary" id="sendButton" type="submit">Send</button>
-      </form>
-
-      <div class="result" id="sendResult" hidden></div>
-    </div>
-
-    <div id="convertView" class="card" hidden>
-      <h2>Convert money</h2>
-      <p class="hint" id="convHint" hidden></p>
-
-      <form id="convertForm" class="form">
-        <label>
-          From
-          <select id="convFrom" required></select>
-        </label>
-        <label>
-          To
-          <select id="convTo" required></select>
-        </label>
-        <label>
-          Amount <span id="convCcy"></span>
-          <input id="convAmount" type="number" min="0" step="any"
-                 inputmode="decimal" required>
-        </label>
-        <button class="primary" id="convQuoteButton" type="submit">Get quote</button>
-      </form>
-
-      <div class="quote" id="convQuote" hidden></div>
-      <p class="hint" id="convCountdown" hidden></p>
-
-      <div class="row" id="convActions" hidden>
-        <button class="primary" id="convConfirm" type="button">Confirm conversion</button>
-        <button id="convCancel" type="button">Cancel</button>
-      </div>
-
-      <div class="result" id="convResult" hidden></div>
-    </div>
-
-    <div id="abroadView" class="stack" hidden>
-      <div class="card">
-        <h2>To a PayBridge account (another currency)</h2>
-        <p class="hint">The recipient gets their own currency. You see the rate, fee and exact amount before you confirm.</p>
-        <form id="xcForm" class="form">
-          <label>From wallet <select id="xcFrom" required></select></label>
-          <label>Recipient account number
-            <input id="xcTo" type="text" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10 digits" required autocomplete="off">
+          <label>
+            Amount <span id="convCcy"></span>
+            <input id="convAmount" type="number" min="0" step="any"
+                   inputmode="decimal" required>
           </label>
-          <p class="resolved" id="xcWho" hidden></p>
-          <label>They receive in <select id="xcReceive" required></select></label>
-          <label>Amount you send <input id="xcAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
-          <button class="primary" id="xcQuoteBtn" type="submit">Get quote</button>
+          <button class="primary" id="convQuoteButton" type="submit">Get quote</button>
         </form>
-        <div class="quote" id="xcQuote" hidden></div>
-        <p class="hint" id="xcCountdown" hidden></p>
-        <div class="form" id="xcActions" hidden>
-          <label>Transaction PIN
-            <input id="xcPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
-          </label>
-          <div class="row">
-            <button class="primary" id="xcConfirm" type="button">Confirm and send</button>
-            <button id="xcCancel" type="button">Cancel</button>
-          </div>
+
+        <div class="quote" id="convQuote" hidden></div>
+        <p class="hint" id="convCountdown" hidden></p>
+
+        <div class="row" id="convActions" hidden>
+          <button class="primary" id="convConfirm" type="button">Confirm conversion</button>
+          <button id="convCancel" type="button">Cancel</button>
         </div>
-        <div class="result" id="xcResult" hidden></div>
+
+        <div class="result" id="convResult" hidden></div>
       </div>
 
-      <div class="card">
-        <h2>To a bank in another country</h2>
-        <p class="hint">Check the account name first. The quote locks the name, fee, rate and exact amount for 30 minutes.</p>
-        <form id="poForm" class="form">
-          <label>From wallet <select id="poFrom" required></select></label>
-          <label>Country <select id="poCountry" required></select></label>
-          <label>Bank code <small>(if the country needs one)</small>
-            <input id="poBankCode" type="text" maxlength="20" autocomplete="off">
-          </label>
-          <div class="form" id="poFields"></div>
-          <label>Account number <input id="poAccount" type="text" maxlength="40" required autocomplete="off"></label>
-          <label>Recipient type
-            <select id="poType"><option value="INDIVIDUAL">Individual</option><option value="CORPORATE">Company</option></select>
-          </label>
-          <label>Purpose <select id="poPurpose" required></select></label>
-          <label>Amount you send <input id="poAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
-          <div class="row wrap">
-            <button id="poVerifyBtn" type="button">Check account name</button>
-            <button class="primary" id="poQuoteBtn" type="submit">Get quote</button>
-          </div>
-        </form>
-        <p class="resolved" id="poVerified" hidden></p>
-        <div class="quote" id="poQuote" hidden></div>
-        <p class="hint" id="poCountdown" hidden></p>
-        <div class="form" id="poActions" hidden>
-          <label>Transaction PIN
-            <input id="poPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
-          </label>
-          <div class="row">
-            <button class="primary" id="poConfirm" type="button">Confirm and send</button>
-            <button id="poCancel" type="button">Cancel</button>
-          </div>
-        </div>
-        <div class="result" id="poResult" hidden></div>
-      </div>
-
-      <div class="card">
-        <div class="row spread"><h2>My payouts</h2><button id="poListBtn" type="button">Refresh</button></div>
-        <ul class="list" id="poList"></ul>
-      </div>
-    </div>
-
-    <div id="historyView" class="card" hidden>
-      <h2>History</h2>
-      <label>
-        Account
-        <select id="historyAccount"></select>
-      </label>
-      <ul class="list" id="historyList"></ul>
-      <div class="receipt" id="receipt" hidden></div>
-    </div>
-
-    <div id="alertsView" class="card" hidden>
-      <div class="row spread">
-        <h2>Alerts</h2>
-        <button class="link" id="readAll" type="button">Mark all read</button>
-      </div>
-      <ul class="list" id="alertList"></ul>
-    </div>
-
-    <div id="operatorView" class="stack" hidden>
-      <div class="card">
-        <h2>Operator</h2>
-        <p class="hint">Settlement tools. You need the operator key set on the server. It is kept in this page's memory only.</p>
-        <form id="opKeyForm" class="form row">
-          <input id="opKey" type="password" placeholder="Operator key" autocomplete="off" required>
-          <button class="primary" type="submit">Use key</button>
-        </form>
-      </div>
-
-      <div id="opPanels" class="stack" hidden>
+      <!-- Send Abroad View (Cross-currency & Payouts) -->
+      <div id="abroadView" class="stack inner-panel" hidden>
         <div class="card">
-          <div class="row spread"><h2>Positions</h2><button id="opPosLoad" type="button">Refresh</button></div>
-          <ul class="list" id="opWarnings"></ul>
-          <div id="opPositions"></div>
+          <h2>To a PayBridge account (another currency)</h2>
+          <p class="hint">The recipient gets their own currency. You see the rate, fee and exact amount before you confirm.</p>
+          <form id="xcForm" class="form">
+            <label>From wallet <select id="xcFrom" required></select></label>
+            <label>Recipient account number
+              <input id="xcTo" type="text" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10 digits" required autocomplete="off">
+            </label>
+            <p class="resolved" id="xcWho" hidden></p>
+            <label>They receive in <select id="xcReceive" required></select></label>
+            <label>Amount you send <input id="xcAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
+            <button class="primary" id="xcQuoteBtn" type="submit">Get quote</button>
+          </form>
+          <div class="quote" id="xcQuote" hidden></div>
+          <p class="hint" id="xcCountdown" hidden></p>
+          <div class="form" id="xcActions" hidden>
+            <label>Transaction PIN
+              <input id="xcPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
+            </label>
+            <div class="row">
+              <button class="primary" id="xcConfirm" type="button">Confirm and send</button>
+              <button id="xcCancel" type="button">Cancel</button>
+            </div>
+          </div>
+          <div class="result" id="xcResult" hidden></div>
         </div>
 
         <div class="card">
-          <h2>Batches</h2>
-          <p class="hint">One UTC day. The Lagos clock is one hour ahead of UTC.</p>
-          <div class="row wrap">
-            <input id="opDate" type="date" aria-label="UTC day">
-            <button id="opBatchLoad" type="button">Show</button>
-            <button id="opBatchRun" type="button">Run this day</button>
+          <h2>To a bank in another country (50 Currencies / 82 Countries)</h2>
+          <p class="hint">Check the account name first. The quote locks the name, fee, rate and exact amount for 30 minutes.</p>
+          <form id="poForm" class="form">
+            <label>From wallet <select id="poFrom" required></select></label>
+            <label>Destination Country <select id="poCountry" required></select></label>
+            <label>Bank code / SWIFT / Routing <small>(if required)</small>
+              <input id="poBankCode" type="text" maxlength="20" autocomplete="off">
+            </label>
+            <div class="form" id="poFields"></div>
+            <label>Account number / IBAN <input id="poAccount" type="text" maxlength="40" required autocomplete="off"></label>
+            <label>Recipient type
+              <select id="poType"><option value="INDIVIDUAL">Individual</option><option value="CORPORATE">Company</option></select>
+            </label>
+            <label>Purpose <select id="poPurpose" required></select></label>
+            <label>Amount you send <input id="poAmount" type="number" min="0.01" step="any" inputmode="decimal" required></label>
+            <div class="row wrap">
+              <button id="poVerifyBtn" type="button">Check account name</button>
+              <button class="primary" id="poQuoteBtn" type="submit">Get quote</button>
+            </div>
+          </form>
+          <p class="resolved" id="poVerified" hidden></p>
+          <div class="quote" id="poQuote" hidden></div>
+          <p class="hint" id="poCountdown" hidden></p>
+          <div class="form" id="poActions" hidden>
+            <label>Transaction PIN
+              <input id="poPin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="off">
+            </label>
+            <div class="row">
+              <button class="primary" id="poConfirm" type="button">Confirm and send</button>
+              <button id="poCancel" type="button">Cancel</button>
+            </div>
           </div>
-          <ul class="list" id="opBatches"></ul>
+          <div class="result" id="poResult" hidden></div>
         </div>
 
         <div class="card">
-          <div class="row spread"><h2>Exceptions</h2><button id="opExcLoad" type="button">Refresh</button></div>
-          <label class="check"><input id="opExcAll" type="checkbox"> Show resolved too</label>
-          <ul class="list" id="opExceptions"></ul>
+          <div class="row spread align-center"><h2>My payouts</h2><button id="poListBtn" type="button">Refresh</button></div>
+          <ul class="list" id="poList"></ul>
+        </div>
+      </div>
+
+      <!-- History View -->
+      <div id="historyView" class="card inner-panel" hidden>
+        <h2>Transaction History</h2>
+        <label>
+          Account
+          <select id="historyAccount"></select>
+        </label>
+        <ul class="list" id="historyList"></ul>
+        <div class="receipt" id="receipt" hidden></div>
+      </div>
+
+      <!-- Alerts View -->
+      <div id="alertsView" class="card inner-panel" hidden>
+        <div class="row spread align-center">
+          <h2>Notifications & Alerts</h2>
+          <button class="link" id="readAll" type="button">Mark all read</button>
+        </div>
+        <ul class="list" id="alertList"></ul>
+      </div>
+
+      <!-- Operator View -->
+      <div id="operatorView" class="stack inner-panel" hidden>
+        <div class="card">
+          <h2>Operator Portal</h2>
+          <p class="hint">Settlement tools. You need the operator key set on the server. It is kept in this page's memory only.</p>
+          <form id="opKeyForm" class="form row">
+            <input id="opKey" type="password" placeholder="Operator key" autocomplete="off" required>
+            <button class="primary" type="submit">Use key</button>
+          </form>
         </div>
 
-        <div class="card">
-          <h2>Sweeps</h2>
-          <p class="hint">Moves fees to revenue and VAT and stamp duty to tax payable. Leave the currency empty to sweep everything.</p>
-          <div class="row wrap">
-            <input id="opSweepCcy" type="text" maxlength="3" placeholder="e.g. NGN" aria-label="Currency (optional)">
-            <button class="primary" id="opSweepRun" type="button">Sweep now</button>
+        <div id="opPanels" class="stack" hidden>
+          <div class="card">
+            <div class="row spread align-center"><h2>Positions</h2><button id="opPosLoad" type="button">Refresh</button></div>
+            <ul class="list" id="opWarnings"></ul>
+            <div id="opPositions"></div>
           </div>
-          <ul class="list" id="opSweepResult"></ul>
+
+          <div class="card">
+            <h2>Batches</h2>
+            <p class="hint">One UTC day. The Lagos clock is one hour ahead of UTC.</p>
+            <div class="row wrap">
+              <input id="opDate" type="date" aria-label="UTC day">
+              <button id="opBatchLoad" type="button">Show</button>
+              <button id="opBatchRun" type="button">Run this day</button>
+            </div>
+            <ul class="list" id="opBatches"></ul>
+          </div>
+
+          <div class="card">
+            <div class="row spread align-center"><h2>Exceptions</h2><button id="opExcLoad" type="button">Refresh</button></div>
+            <label class="check"><input id="opExcAll" type="checkbox"> Show resolved too</label>
+            <ul class="list" id="opExceptions"></ul>
+          </div>
+
+          <div class="card">
+            <h2>Sweeps</h2>
+            <p class="hint">Moves fees to revenue and VAT and stamp duty to tax payable. Leave the currency empty to sweep everything.</p>
+            <div class="row wrap">
+              <input id="opSweepCcy" type="text" maxlength="3" placeholder="e.g. NGN" aria-label="Currency (optional)">
+              <button class="primary" id="opSweepRun" type="button">Sweep now</button>
+            </div>
+            <ul class="list" id="opSweepResult"></ul>
+          </div>
         </div>
       </div>
     </div>
   </section>
-</main>
+</div>
 
 <script src="/app.js"></script>
 <script src="/convert.js"></script>

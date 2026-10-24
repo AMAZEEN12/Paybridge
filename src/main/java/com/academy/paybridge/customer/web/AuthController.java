@@ -5,6 +5,7 @@ import com.academy.paybridge.customer.service.AuthService;
 import com.academy.paybridge.customer.service.RegistrationService;
 import com.academy.paybridge.customer.web.AuthDtos.LoginRequest;
 import com.academy.paybridge.customer.web.AuthDtos.LoginResponse;
+import com.academy.paybridge.customer.web.AuthDtos.RefreshRequest;
 import com.academy.paybridge.customer.web.AuthDtos.RegisterRequest;
 import com.academy.paybridge.customer.web.AuthDtos.RegisterResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,5 +54,21 @@ public class AuthController {
             description = "Copy the token, click Authorize at the top, and paste it. It expires after 30 minutes.")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return auth.login(request.email(), request.password());
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Obtain a fresh access token using a refresh token",
+            description = "Keeps the customer logged in during long operations or background tasks without interruption.")
+    public LoginResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return auth.refresh(request.refreshToken());
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Revoke the refresh token on sign out")
+    public void logout(@RequestBody(required = false) RefreshRequest request) {
+        if (request != null) {
+            auth.logout(request.refreshToken());
+        }
     }
 }

@@ -6,6 +6,65 @@
 
     var $ = function (id) { return document.getElementById(id); };
     var token = null;
+    var refreshToken = (function () {
+        try {
+            return localStorage.getItem('paybridge_refresh_token');
+        } catch (e) {
+            return null;
+        }
+    })();
+    var refreshPromise = null;
+    var selectedCurrency = 'USD';
+    var FLAGS = {
+        USD: '🇺🇸', EUR: '🇪🇺', GBP: '🇬🇧', AUD: '🇦🇺', NGN: '🇳🇬',
+        CAD: '🇨🇦', JPY: '🇯🇵', CHF: '🇨🇭', CNY: '🇨🇳', HKD: '🇭🇰',
+        SGD: '🇸🇬', INR: '🇮🇳', ZAR: '🇿🇦', GHS: '🇬🇭', KES: '🇰🇪',
+        UGX: '🇺🇬', TZS: '🇹🇿', RWF: '🇷🇼', XOF: '🌍', XAF: '🌍',
+        EGP: '🇪🇬', MAD: '🇲🇦', ZMW: '🇿🇲', AED: '🇦🇪', SAR: '🇸🇦',
+        QAR: '🇶🇦', KWD: '🇰🇼', BHD: '🇧🇭', OMR: '🇴🇲', ILS: '🇮🇱',
+        TRY: '🇹🇷', BRL: '🇧🇷', MXN: '🇲🇽', CLP: '🇨🇱', COP: '🇨🇴',
+        SEK: '🇸🇪', NOK: '🇳🇴', DKK: '🇩🇰', PLN: '🇵🇱', CZK: '🇨🇿',
+        HUF: '🇭🇺', RON: '🇷🇴', KRW: '🇰🇷', THB: '🇹🇭', MYR: '🇲🇾',
+        IDR: '🇮🇩', PHP: '🇵🇭', VND: '🇻🇳', PKR: '🇵🇰', NZD: '🇳🇿'
+    };
+
+    function obtainFreshToken() {
+        if (!refreshToken) {
+            return Promise.reject(new Error('No refresh token'));
+        }
+        if (refreshPromise) {
+            return refreshPromise;
+        }
+        refreshPromise = fetch('/api/v1/auth/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ refreshToken: refreshToken })
+        }).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok || !data || !data.token) {
+                    try {
+                        localStorage.removeItem('paybridge_refresh_token');
+                    } catch (e) {}
+                    refreshToken = null;
+                    throw new Error('Refresh failed');
+                }
+                token = data.token;
+                if (data.refreshToken) {
+                    refreshToken = data.refreshToken;
+                    try {
+                        localStorage.setItem('paybridge_refresh_token', refreshToken);
+                    } catch (e) {}
+                }
+                return token;
+            });
+        }).finally(function () {
+            refreshPromise = null;
+        });
+        return refreshPromise;
+    }
     var me = null;
     var accounts = [];
     var wallets = [];
@@ -330,6 +389,131 @@
         });
     }
 
+    
+    function renderWalletStrip() {
+        var strip = $('walletStrip');
+        if (!strip) return;
+        clear(strip);
+
+        var displayWallets = wallets.filter(function (w) {
+            return w.status === 'ACTIVE';
+        });
+
+        if (!displayWallets.length && accounts.length) {
+            displayWallets = [{
+                currency: 'USD',
+                display: '$0.00',
+                balance: 0
+            }];
+        }
+
+        displayWallets.forEach(function (w) {
+            var flag = FLAGS[w.currency] || '🌐';
+            var chip = el('button', 'currency-chip' + (w.currency === selectedCurrency ? ' active' : ''));
+            chip.type = 'button';
+
+            var flagSpan = el('span', 'flag-circle', flag);
+            var codeSpan = el('span', 'chip-ccy', w.currency);
+            var valSpan = el('span', 'chip-val', w.display || moneyIn(w.balance, w.currency));
+
+            chip.appendChild(flagSpan);
+            chip.appendChild(codeSpan);
+            chip.appendChild(valSpan);
+
+            chip.addEventListener('click', function () {
+                selectedCurrency = w.currency;
+                renderWalletStrip();
+                renderHeroBalance();
+            });
+
+            strip.appendChild(chip);
+        });
+    }
+
+    function renderHeroBalance() {
+        var hero = $('heroBalance');
+        var acctNum = $('heroAccountNumber');
+        if (!hero) return;
+
+        var curWallet = wallets.filter(function (w) {
+            return w.currency === selectedCurrency && w.status === 'ACTIVE';
+        })[0];
+
+        if (!curWallet && wallets.length) {
+            curWallet = wallets[0];
+            selectedCurrency = curWallet.currency;
+        }
+
+        if (curWallet) {
+            hero.textContent = curWallet.display || moneyIn(curWallet.balance, curWallet.currency);
+        } else if (accounts.length) {
+            hero.textContent = money(accounts[0].balance);
+        } else {
+            hero.textContent = '$0.00';
+        }
+
+        if (accounts.length && acctNum) {
+            acctNum.textContent = 'Account •••• ' + accounts[0].accountNumber.slice(-4);
+        }
+    }
+
+    function renderTransactionFeed() {
+        var list = $('feedList');
+        if (!list) return;
+        clear(list);
+
+        var sampleTransactions = [
+            {
+                title: 'Conversion USD → EUR',
+                subtitle: 'Currency conversion',
+                amount: '$2,000.00',
+                counter: '≒ €1,727.08',
+                icon: '⇅',
+                isConversion: true
+            },
+            {
+                title: 'John Williams',
+                subtitle: 'Transfers',
+                amount: '$75.00',
+                counter: 'Debit card',
+                avatar: 'JW'
+            },
+            {
+                title: 'Uber',
+                subtitle: 'Taxi',
+                amount: '$34.24',
+                counter: 'Debit card',
+                avatar: 'UB'
+            }
+        ];
+
+        sampleTransactions.forEach(function (tx) {
+            var row = el('li', 'tx-row');
+            var left = el('div', 'tx-left');
+
+            var avatar = el('div', 'tx-avatar' + (tx.isConversion ? ' conv-icon' : ''), tx.avatar || tx.icon);
+            left.appendChild(avatar);
+
+            var meta = el('div', 'tx-meta');
+            meta.appendChild(el('div', 'tx-title', tx.title));
+            meta.appendChild(el('div', 'tx-subtitle', tx.subtitle));
+            left.appendChild(meta);
+
+            var right = el('div', 'tx-right');
+            right.appendChild(el('div', 'tx-amount', tx.amount));
+            right.appendChild(el('div', 'tx-counter' + (tx.isConversion ? '' : ' muted'), tx.counter));
+
+            row.appendChild(left);
+            row.appendChild(right);
+
+            row.addEventListener('click', function () {
+                showView('history');
+            });
+
+            list.appendChild(row);
+        });
+    }
+
     function renderAccounts() {
         var list = $('accountList');
 
@@ -342,6 +526,9 @@
                 'We could not find your account. Log out and back in, or contact support.'
             ));
             renderSwap();
+        renderWalletStrip();
+        renderHeroBalance();
+        renderTransactionFeed();
             return;
         }
 
@@ -1288,6 +1475,67 @@
     /* ---------- wiring ---------- */
 
     function wire() {
+        
+        if ($('btnShowRegister')) {
+            $('btnShowRegister').addEventListener('click', function () {
+                $('landingHero').hidden = true;
+                $('authFormBox').hidden = false;
+                setAuthTab(false);
+            });
+        }
+        if ($('btnShowLogin')) {
+            $('btnShowLogin').addEventListener('click', function () {
+                $('landingHero').hidden = true;
+                $('authFormBox').hidden = false;
+                setAuthTab(true);
+            });
+        }
+        if ($('btnBackToLanding')) {
+            $('btnBackToLanding').addEventListener('click', function () {
+                $('authFormBox').hidden = true;
+                $('landingHero').hidden = false;
+            });
+        }
+
+        if ($('actionBtnAdd')) {
+            $('actionBtnAdd').addEventListener('click', function () {
+                if (accounts.length) {
+                    fundAccount(accounts[0].accountNumber);
+                } else {
+                    toast('No active account found.', true);
+                }
+            });
+        }
+        if ($('actionBtnSend')) {
+            $('actionBtnSend').addEventListener('click', function () {
+                showView('send');
+            });
+        }
+        if ($('actionBtnConvert')) {
+            $('actionBtnConvert').addEventListener('click', function () {
+                showView('convert');
+            });
+        }
+        if ($('actionBtnMore')) {
+            $('actionBtnMore').addEventListener('click', function () {
+                showView('history');
+            });
+        }
+        if ($('btnViewAllTransactions')) {
+            $('btnViewAllTransactions').addEventListener('click', function () {
+                showView('history');
+            });
+        }
+        if ($('btnQuickAddWallet')) {
+            $('btnQuickAddWallet').addEventListener('click', function () {
+                var sc = $('swapCard');
+                if (sc) {
+                    sc.hidden = false;
+                    sc.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        }
+
         $('tabLogin').addEventListener('click', function () {
             setAuthTab(true);
         });

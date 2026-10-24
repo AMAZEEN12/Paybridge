@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-
 public final class AuthDtos {
 
     private AuthDtos() {
@@ -17,7 +16,6 @@ public final class AuthDtos {
             @NotBlank @Size(min = 8, max = 72, message = "must be 8 to 72 characters") String password) {
         @Override
         public String toString() {
-
             return "RegisterRequest[email=" + email + "]";
         }
     }
@@ -29,10 +27,21 @@ public final class AuthDtos {
         }
     }
 
-    public record LoginResponse(String token, String tokenType, long expiresInSeconds) {
+    public record LoginResponse(String token, String tokenType, long expiresInSeconds, String refreshToken) {
+        public LoginResponse(String token, String tokenType, long expiresInSeconds) {
+            this(token, tokenType, expiresInSeconds, null);
+        }
+
         @Override
         public String toString() {
             return "LoginResponse[tokenType=" + tokenType + "]";
+        }
+    }
+
+    public record RefreshRequest(@NotBlank String refreshToken) {
+        @Override
+        public String toString() {
+            return "RefreshRequest[***]";
         }
     }
 

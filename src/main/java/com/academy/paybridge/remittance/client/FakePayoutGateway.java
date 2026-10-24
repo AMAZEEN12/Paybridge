@@ -1,5 +1,6 @@
 package com.academy.paybridge.remittance.client;
 
+import com.academy.paybridge.fx.api.RateApi;
 import com.academy.paybridge.remittance.service.PayoutProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,8 @@ public class FakePayoutGateway implements PayoutGateway {
     }
 
     private final boolean retryEnabled;
+    @Autowired(required = false)
+    private RateApi rateApi;
     private final Map<String, Outcome> processed = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> requests = new ConcurrentHashMap<>();
     private final AtomicInteger verifyAccountCalls = new AtomicInteger();
@@ -86,15 +89,26 @@ public class FakePayoutGateway implements PayoutGateway {
 
     @Override
     public ProviderRate getRate(String sourceCurrency, String destinationCurrency) {
+        if (sourceCurrency.equals(destinationCurrency)) {
+            return new ProviderRate(BigDecimal.ONE, null, null);
+        }
+        if (rateApi != null) {
+            try {
+                RateApi.RateResult r = rateApi.rate(sourceCurrency, destinationCurrency);
+                if (r != null && r.rate() != null) {
+                    return new ProviderRate(r.rate(), null, null);
+                }
+            } catch (Exception ignored) {
+            }
+        }
         BigDecimal from = USD_PER_UNIT.get(sourceCurrency);
         BigDecimal to = USD_PER_UNIT.get(destinationCurrency);
-        if (from == null || to == null) {
-            throw new RateUnavailableException("No rate for " + sourceCurrency + " to " + destinationCurrency + ".");
+        if (from != null && to != null) {
+            BigDecimal rate = from.divide(to, 12, RoundingMode.HALF_EVEN);
+            return new ProviderRate(rate, null, null);
         }
-        BigDecimal rate = sourceCurrency.equals(destinationCurrency)
-                ? BigDecimal.ONE
-                : from.divide(to, 12, RoundingMode.HALF_EVEN);
-        return new ProviderRate(rate, null, null);          // no rate id: this is the OWN_LOCK shape
+        BigDecimal fallbackRate = from != null ? from : (to != null ? BigDecimal.ONE.divide(to, 12, RoundingMode.HALF_EVEN) : BigDecimal.ONE);
+        return new ProviderRate(fallbackRate, null, null);          // no rate id: this is the OWN_LOCK shape
     }
 
     @Override
