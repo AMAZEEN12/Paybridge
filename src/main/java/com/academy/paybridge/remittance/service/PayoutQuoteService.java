@@ -83,7 +83,7 @@ public class PayoutQuoteService {
         String target = country.currency();
         CurrencyInfo targetInfo = currencies.require(target);
 
-        policy.checkCorridor(customerId, country.code());                               // R-COR-4
+        policy.checkCorridor(customerId, country.code(), source);                               // R-COR-4                             // R-COR-4
 
         AccountView account = accounts.existingFor(customerId);
         if (accounts.isFrozen(account.accountNumber())) {

@@ -14,7 +14,7 @@ public class CorridorService implements CorridorApi {
     }
 
     @Override
-    public CorridorResult check(String senderCountry, String destinationCountry) {
-        return CorridorRules.evaluate(props.rules(), senderCountry, destinationCountry);
+    public CorridorResult check(String senderCountry, String destinationCountry, String sourceCurrency) {
+        return CorridorRules.evaluate(props.rules(), senderCountry, destinationCountry, sourceCurrency);
     }
 }

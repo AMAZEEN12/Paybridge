@@ -97,7 +97,7 @@ public class PayoutConfirmationService {
                 .filter(q -> q.customerId().equals(customerId))
                 .orElseThrow(() -> ApiException.notFound("QUOTE_NOT_FOUND", "Quote not found."));
 
-        policy.checkCorridor(customerId, quote.country());           // R-COR-4: switching a rule off stops old quotes
+        policy.checkCorridor(customerId, quote.country(), quote.sourceCurrency());   // R-COR-4: switching a rule off stops old quotes          // R-COR-4: switching a rule off stops old quotes
         policy.checkLimits(customerId, account, quote.usdEquivalentMinor());   // R-LIM2-2, before this quote counts
 
         if (accounts.isFrozen(account)) {

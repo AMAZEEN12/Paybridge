@@ -72,7 +72,9 @@ public class FundingDetails {
         this.reference = reference;
     }
 
-    public Long getId() { return id; }
+    public Long getId() {
+        return id;
+    }
     public Wallet getWallet() { return wallet; }
     public String getBankName() { return bankName; }
     public String getBankCountry() { return bankCountry; }

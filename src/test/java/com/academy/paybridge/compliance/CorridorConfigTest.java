@@ -29,17 +29,21 @@ class CorridorConfigTest {
     }
 
     @Test
-    void theShippedRulesLoadInOrderWithNigeriaOutboundOn() {
-        assertThat(props.rules()).hasSize(3);
-        assertThat(props.rules().get(0)).isEqualTo(new CorridorProperties.Rule("NG", "*", true));
-        assertThat(props.rules().get(1)).isEqualTo(new CorridorProperties.Rule("*", "NG", true));
-        assertThat(props.rules().get(2)).isEqualTo(new CorridorProperties.Rule("*", "*", true));
+    void theShippedRulesLoadInOrderWithNigeriaOutboundOnlyFromUsdAndGbpWallets() {
+        assertThat(props.rules()).hasSize(4);
+        assertThat(props.rules().get(0)).isEqualTo(new CorridorProperties.Rule("NG", "*", java.util.List.of("USD", "GBP"), true));
+        assertThat(props.rules().get(1)).isEqualTo(new CorridorProperties.Rule("NG", "*", false));
+        assertThat(props.rules().get(2)).isEqualTo(new CorridorProperties.Rule("*", "NG", true));
+        assertThat(props.rules().get(3)).isEqualTo(new CorridorProperties.Rule("*", "*", true));
     }
 
     @Test
     void theBeanAnswersFromTheShippedTable() {
-        assertThat(corridors.check("NG", "GB").allowed()).isTrue();
-        assertThat(corridors.check("GB", "NG").allowed()).isTrue();
-        assertThat(corridors.check("NG", null).allowed()).isFalse();
+        assertThat(corridors.check("NG", "GB", "USD").allowed()).isTrue();
+        assertThat(corridors.check("NG", "GB", "GBP").allowed()).isTrue();
+        assertThat(corridors.check("NG", "GB", "NGN").allowed()).isFalse();
+        assertThat(corridors.check("NG", "GB").allowed()).isFalse();         // no wallet currency: the gated rule does not match
+        assertThat(corridors.check("GB", "NG", "GBP").allowed()).isTrue();
+        assertThat(corridors.check("NG", null, "USD").allowed()).isFalse();
     }
 }

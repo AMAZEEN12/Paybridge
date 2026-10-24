@@ -41,15 +41,15 @@ public class PayoutPolicyService {
         this.zone = ZoneId.of(appProps.zone() == null ? "Africa/Lagos" : appProps.zone());
     }
 
-    /** R-COR-1 to 4: the sender's stored country against the bank's country. */
-    public void checkCorridor(Long customerId, String destinationCountry) {
-        CorridorResult result = corridors.check(customers.countryOf(customerId), destinationCountry);
+    /** R-COR-1 to 4: the sender's stored country, the bank's country and the wallet currency it is paid from. */
+    public void checkCorridor(Long customerId, String destinationCountry, String sourceCurrency) {
+        CorridorResult result = corridors.check(customers.countryOf(customerId), destinationCountry, sourceCurrency);
         if (!result.allowed()) {
             throw ApiException.unprocessable("CORRIDOR_NOT_ALLOWED",
-                    "Payouts from your country to " + destinationCountry + " are not available.");
+                    "Payouts from your country to " + destinationCountry + " are not available from a "
+                            + sourceCurrency + " wallet. Pay from a wallet in a currency your country allows.");
         }
     }
-
     /** R-LIM2-2, R-LIM2-3: per-payout and shared daily limit in USD, on the Lagos day. */
     public void checkLimits(Long customerId, String sourceAccount, long usdEquivalentMinor) {
         Instant since = clock.instant().atZone(zone).toLocalDate().atStartOfDay(zone).toInstant();

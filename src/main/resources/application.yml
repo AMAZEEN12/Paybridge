@@ -56,7 +56,8 @@ paybridge:
     enabled: true
   corridors:
     rules: # first match wins; no match = refused; same-country pairs are not corridors
-      - { from: "NG", to: "*",  enabled: true }    # Nigeria-outbound; set false to switch it off
+      - { from: "NG", to: "*",  source-currencies: [ "USD", "GBP" ], enabled: true }
+      - { from: "NG", to: "*",  enabled: false }   # everything else from Nigeria to abroad: refused
       - { from: "*",  to: "NG", enabled: true }    # remittance to Nigeria
       - { from: "*",  to: "*",  enabled: true }    # other pairs (to review)
   reconciliation:
