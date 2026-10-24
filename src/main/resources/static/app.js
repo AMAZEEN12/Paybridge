@@ -1886,7 +1886,7 @@
         toast: toast,
         friendly: friendly,
         el: el,
-        clear: clear
+        clear: clear,
         loadAccounts: loadAccounts
     };
 
