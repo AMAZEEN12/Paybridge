@@ -14,7 +14,7 @@
         }
     })();
     var refreshPromise = null;
-    var selectedCurrency = 'USD';
+    var selectedCurrency = null;
     var FLAGS = {
         USD: '🇺🇸', EUR: '🇪🇺', GBP: '🇬🇧', AUD: '🇦🇺', NGN: '🇳🇬',
         CAD: '🇨🇦', JPY: '🇯🇵', CHF: '🇨🇭', CNY: '🇨🇳', HKD: '🇭🇰',
@@ -68,6 +68,7 @@
     var me = null;
     var accounts = [];
     var wallets = [];
+
     var currencyList = [];
     var banks = [];
     var sendKey = null;
@@ -291,17 +292,23 @@
         me = null;
         accounts = [];
         wallets = [];
-        if (window.PayBridgeOperator) {
-            window.PayBridgeOperator.reset();
+        sendKey = null;
+
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
 
-        clearTimeout(bellSoon);
-        clearInterval(pollTimer);
+        if (quoteTimer) {
+            clearTimeout(quoteTimer);
+            quoteTimer = null;
+        }
 
+        $('authView').hidden = false;
         $('appView').hidden = true;
         $('who').hidden = true;
-        $('authView').hidden = false;
         $('loginPassword').value = '';
+        $('regPassword').value = '';
 
         if (message) {
             toast(message, false);
@@ -311,48 +318,38 @@
     function loadMeAndEnter() {
         return api('/customers/me').then(function (r) {
             me = r.data;
+            return loadAccounts();
+        }).then(function () {
             enterApp();
         });
     }
 
-    /* ---------- views ---------- */
-
-    var VIEWS = ['home', 'send', 'convert', 'history', 'alerts', 'abroad', 'operator'];
-
     function showView(name) {
-        VIEWS.forEach(function (v) {
-            $(v + 'View').hidden = v !== name;
+        document.querySelectorAll('.view').forEach(function (v) {
+            v.hidden = v.id !== 'view-' + name;
         });
 
         document.querySelectorAll('[data-view]').forEach(function (b) {
-            b.classList.toggle(
-                'active',
-                b.getAttribute('data-view') === name
-            );
+            b.classList.toggle('active', b.getAttribute('data-view') === name);
         });
 
         if (name === 'home') {
             loadAccounts();
-        }
-
-        if (name === 'send') {
-            prepareSend();
+            loadHistoryPreview();
         }
 
         if (name === 'history') {
-            prepareHistory();
+            loadHistory();
+        }
+
+        if (name === 'send') {
+            loadSendOptions();
         }
 
         if (name === 'alerts') {
             loadAlerts();
         }
 
-        if (name === 'convert' && window.PayBridgeConvert) {
-            window.PayBridgeConvert.open();
-        }
-        if (name === 'operator' && window.PayBridgeOperator) {
-            window.PayBridgeOperator.open();
-        }
         if (name === 'abroad' && window.PayBridgeAbroad) {
             window.PayBridgeAbroad.open();
         }
@@ -389,21 +386,38 @@
         });
     }
 
-    
+    /* The wallet shown in the big balance card. First load: the home wallet (never a hard-coded USD). */
+    function ensureSelectedCurrency() {
+        var chosen = wallets.filter(function (w) {
+            return w.currency === selectedCurrency;
+        })[0];
+
+        if (!chosen) {
+            chosen = wallets.filter(function (w) {
+                return w.home;
+            })[0] || wallets[0];
+            selectedCurrency = chosen ? chosen.currency : null;
+        }
+
+        return chosen || null;
+    }
+
     function renderWalletStrip() {
         var strip = $('walletStrip');
         if (!strip) return;
         clear(strip);
+        ensureSelectedCurrency();
 
         var displayWallets = wallets.filter(function (w) {
             return w.status === 'ACTIVE';
         });
 
+        // The wallets call failed or is empty: show the real account balance instead of a made-up $0.00.
         if (!displayWallets.length && accounts.length) {
             displayWallets = [{
-                currency: 'USD',
-                display: '$0.00',
-                balance: 0
+                currency: 'NGN',
+                display: money(accounts[0].balance),
+                balance: accounts[0].balance
             }];
         }
 
@@ -412,18 +426,15 @@
             var chip = el('button', 'currency-chip' + (w.currency === selectedCurrency ? ' active' : ''));
             chip.type = 'button';
 
-            var flagSpan = el('span', 'flag-circle', flag);
-            var codeSpan = el('span', 'chip-ccy', w.currency);
-            var valSpan = el('span', 'chip-val', w.display || moneyIn(w.balance, w.currency));
-
-            chip.appendChild(flagSpan);
-            chip.appendChild(codeSpan);
-            chip.appendChild(valSpan);
+            chip.appendChild(el('span', 'flag-circle', flag));
+            chip.appendChild(el('span', 'chip-ccy', w.currency));
+            chip.appendChild(el('span', 'chip-val', w.display || moneyIn(w.balance, w.currency)));
 
             chip.addEventListener('click', function () {
                 selectedCurrency = w.currency;
                 renderWalletStrip();
                 renderHeroBalance();
+                renderAllWalletsGrid();
             });
 
             strip.appendChild(chip);
@@ -433,35 +444,29 @@
     function renderHeroBalance() {
         var hero = $('heroBalance');
         var acctNum = $('heroAccountNumber');
+        var chip = $('heroActiveChip');
         if (!hero) return;
 
-        var curWallet = wallets.filter(function (w) {
-            return w.currency === selectedCurrency && w.status === 'ACTIVE';
-        })[0];
+        var cur = ensureSelectedCurrency();
 
-        if (!curWallet && wallets.length) {
-            curWallet = wallets[0];
-            selectedCurrency = curWallet.currency;
-        }
-
-        if (curWallet) {
-            hero.textContent = curWallet.display || moneyIn(curWallet.balance, curWallet.currency);
+        if (cur) {
+            hero.textContent = cur.display || moneyIn(cur.balance, cur.currency);
         } else if (accounts.length) {
             hero.textContent = money(accounts[0].balance);
         } else {
-            hero.textContent = '$0.00';
+            hero.textContent = '—';
         }
 
         if (accounts.length && acctNum) {
             acctNum.textContent = 'Account •••• ' + accounts[0].accountNumber.slice(-4);
         }
-        var chip = $('heroActiveChip');
+
         if (chip) {
-            var flag = FLAGS[selectedCurrency] || '🌐';
-            chip.textContent = flag + ' ' + selectedCurrency + ' Active';
+            var code = cur ? cur.currency : 'NGN';
+            var state = cur && cur.status === 'PARKED' ? 'Parked' : 'Active';
+            chip.textContent = (FLAGS[code] || '🌐') + ' ' + code + ' ' + state;
         }
     }
-
     function renderTransactionFeed() {
         var list = $('feedList');
         if (!list) return;
@@ -519,11 +524,71 @@
         });
     }
 
-    
+
+    /* One wallet card. Built fresh every time, so its buttons always work (the old code cloned cards and lost them). */
+    function buildWalletCard(w) {
+        var flag = FLAGS[w.currency] || '🌐';
+        var cInfo = currencyList.filter(function (c) { return c.code === w.currency; })[0];
+        var cName = cInfo ? cInfo.name : w.currency;
+
+        var card = el('div', 'wallet-item-card' + (w.status === 'ACTIVE' ? ' is-active' : ' is-parked'));
+        var top = el('div', 'wallet-item-top');
+
+        var flagName = el('div', 'wallet-flag-name');
+        flagName.appendChild(el('span', 'wallet-flag-emoji', flag));
+        var titleBox = el('div');
+        titleBox.appendChild(el('div', 'wallet-title-bold', w.currency));
+        titleBox.appendChild(el('div', 'hint', cName));
+        flagName.appendChild(titleBox);
+        top.appendChild(flagName);
+
+        top.appendChild(el('span',
+            'wallet-badge-status ' + (w.home ? 'home' : (w.status === 'ACTIVE' ? 'active' : 'parked')),
+            w.home ? 'HOME' : w.status));
+        card.appendChild(top);
+
+        card.appendChild(el('div', 'wallet-balance-amount', w.display || moneyIn(w.balance, w.currency)));
+
+        function select() {
+            selectedCurrency = w.currency;
+            renderWalletStrip();
+            renderHeroBalance();
+            renderAllWalletsGrid();
+        }
+
+        var actions = el('div', 'wallet-item-actions');
+
+        var selectBtn = el('button', 'btn-wallet-action', w.currency === selectedCurrency ? 'Selected' : 'View in Hero');
+        selectBtn.type = 'button';
+        selectBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            select();
+        });
+        actions.appendChild(selectBtn);
+
+        var addBtn = el('button', 'btn-wallet-action', '+ Test Money');
+        addBtn.type = 'button';
+        addBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (!accounts.length) {
+                return;
+            }
+            if (w.currency === 'NGN') {
+                fundAccount(accounts[0].accountNumber);
+            } else {
+                fundWallet(accounts[0].accountNumber, w.currency);
+            }
+        });
+        actions.appendChild(addBtn);
+
+        card.appendChild(actions);
+        card.addEventListener('click', select);
+        return card;
+    }
+
     function renderAllWalletsGrid() {
         var grid = $('allWalletsGrid');
         var fullGrid = $('walletsFullGrid');
-        if (!grid && !fullGrid) return;
 
         if (grid) clear(grid);
         if (fullGrid) clear(fullGrid);
@@ -535,133 +600,14 @@
             if (w.status === 'ACTIVE') activeCount++;
             if (w.status === 'PARKED') parkedCount++;
 
-            var flag = FLAGS[w.currency] || '🌐';
-            var cInfo = currencyList.filter(function (c) { return c.code === w.currency; })[0];
-            var cName = cInfo ? cInfo.name : w.currency;
-
-            // Build item card
-            var card = el('div', 'wallet-item-card' + (w.status === 'ACTIVE' ? ' is-active' : ' is-parked'));
-            var top = el('div', 'wallet-item-top');
-            
-            var flagName = el('div', 'wallet-flag-name');
-            flagName.appendChild(el('span', 'wallet-flag-emoji', flag));
-            var titleBox = el('div');
-            titleBox.appendChild(el('div', 'wallet-title-bold', w.currency));
-            titleBox.appendChild(el('div', 'hint', cName));
-            flagName.appendChild(titleBox);
-            top.appendChild(flagName);
-
-            var badge = el('span', 'wallet-badge-status ' + (w.home ? 'home' : (w.status === 'ACTIVE' ? 'active' : 'parked')), 
-                           w.home ? 'HOME' : w.status);
-            top.appendChild(badge);
-            card.appendChild(top);
-
-            var bal = el('div', 'wallet-balance-amount', w.display || moneyIn(w.balance, w.currency));
-            card.appendChild(bal);
-
-            var actions = el('div', 'wallet-item-actions');
-            var selectBtn = el('button', 'btn-wallet-action', w.currency === selectedCurrency ? 'Selected' : 'View in Hero');
-            selectBtn.type = 'button';
-            selectBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                selectedCurrency = w.currency;
-                renderWalletStrip();
-                renderHeroBalance();
-                renderAllWalletsGrid();
-            });
-            actions.appendChild(selectBtn);
-
-            var addBtn = el('button', 'btn-wallet-action', '+ Test Money');
-            addBtn.type = 'button';
-            addBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                if (accounts.length) {
-                    if (w.currency === 'NGN') {
-                        fundAccount(accounts[0].accountNumber);
-                    } else {
-                        fundWallet(accounts[0].accountNumber, w.currency);
-                    }
-                }
-            });
-            actions.appendChild(addBtn);
-
-            card.appendChild(actions);
-
-            card.addEventListener('click', function () {
-                selectedCurrency = w.currency;
-                renderWalletStrip();
-                renderHeroBalance();
-                renderAllWalletsGrid();
-            });
-
-            if (grid) grid.appendChild(card.cloneNode(true));
-            if (fullGrid) fullGrid.appendChild(card);
+            if (grid) grid.appendChild(buildWalletCard(w));
+            if (fullGrid) fullGrid.appendChild(buildWalletCard(w));
         });
 
-        // Re-attach event listeners on grid items if cloned
-        if (grid) {
-            clear(grid);
-            wallets.forEach(function (w) {
-                var flag = FLAGS[w.currency] || '🌐';
-                var cInfo = currencyList.filter(function (c) { return c.code === w.currency; })[0];
-                var cName = cInfo ? cInfo.name : w.currency;
-
-                var card = el('div', 'wallet-item-card' + (w.status === 'ACTIVE' ? ' is-active' : ' is-parked'));
-                var top = el('div', 'wallet-item-top');
-                
-                var flagName = el('div', 'wallet-flag-name');
-                flagName.appendChild(el('span', 'wallet-flag-emoji', flag));
-                var titleBox = el('div');
-                titleBox.appendChild(el('div', 'wallet-title-bold', w.currency));
-                titleBox.appendChild(el('div', 'hint', cName));
-                flagName.appendChild(titleBox);
-                top.appendChild(flagName);
-
-                var badge = el('span', 'wallet-badge-status ' + (w.home ? 'home' : (w.status === 'ACTIVE' ? 'active' : 'parked')), 
-                               w.home ? 'HOME' : w.status);
-                top.appendChild(badge);
-                card.appendChild(top);
-
-                var bal = el('div', 'wallet-balance-amount', w.display || moneyIn(w.balance, w.currency));
-                card.appendChild(bal);
-
-                var actions = el('div', 'wallet-item-actions');
-                var selectBtn = el('button', 'btn-wallet-action', w.currency === selectedCurrency ? 'Selected' : 'View in Hero');
-                selectBtn.type = 'button';
-                selectBtn.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    selectedCurrency = w.currency;
-                    renderWalletStrip();
-                    renderHeroBalance();
-                    renderAllWalletsGrid();
-                });
-                actions.appendChild(selectBtn);
-
-                var addBtn = el('button', 'btn-wallet-action', '+ Test Money');
-                addBtn.type = 'button';
-                addBtn.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    if (accounts.length) {
-                        if (w.currency === 'NGN') {
-                            fundAccount(accounts[0].accountNumber);
-                        } else {
-                            fundWallet(accounts[0].accountNumber, w.currency);
-                        }
-                    }
-                });
-                actions.appendChild(addBtn);
-
-                card.appendChild(actions);
-
-                card.addEventListener('click', function () {
-                    selectedCurrency = w.currency;
-                    renderWalletStrip();
-                    renderHeroBalance();
-                    renderAllWalletsGrid();
-                });
-
-                grid.appendChild(card);
-            });
+        if (!wallets.length) {
+            var note = 'No wallets to show yet. Refresh the page, or log out and back in.';
+            if (grid) grid.appendChild(el('p', 'hint', note));
+            if (fullGrid) fullGrid.appendChild(el('p', 'hint', note));
         }
 
         var capText = $('walletCapacityText');
@@ -730,10 +676,9 @@
                 'We could not find your account. Log out and back in, or contact support.'
             ));
             renderSwap();
-        renderWalletStrip();
-        renderHeroBalance();
-        renderTransactionFeed();
-        renderAllWalletsGrid();
+            renderWalletStrip();
+            renderHeroBalance();
+            renderAllWalletsGrid();
             return;
         }
 
@@ -846,15 +791,9 @@
             toast('Added 500 ' + currency + ' of test money.', false);
             loadAccounts();
         }, function (e) {
-            toast(
-                e.status === 404
-                    ? 'Test money is switched off on this server.'
-                    : friendly(e),
-                true
-            );
+            toast(friendly(e), true);
         });
     }
-
     // Fills the swap card: currencies that are not active yet, and (only when all 4 slots are used) the wallets that can be parked.
     function renderSwap() {
         var card = $('swapCard');
@@ -1344,7 +1283,6 @@
             });
         }, 3000);
     }
-
     function prepareFromSelect() {
         var sel = $('sendFrom');
         var current = sel.value;
@@ -1653,6 +1591,57 @@
                 li.appendChild(main);
 
                 if (!n.read) {
+                    var mark = el('button', 'secondary', 'Mark as read');
+
+                    mark.type = 'button';
+                    mark.addEventListener('click', function () {
+                        api('/notifications/' + n.id + '/read', {
+                            method: 'POST'
+                        }).then(function () {
+                            loadAlerts();
+                            refreshBell();
+                        }, function (e) {
+                            toast(friendly(e), true);
+                        });
+                    });
+
+                    li.appendChild(mark);
+                }
+
+                list.appendChild(li);
+            });
+        }, function (e) {
+            toast(friendly(e), true);
+        });
+    }
+    function loadAlerts() {
+        var list = $('alertList');
+
+        clear(list);
+
+        api('/notifications').then(function (r) {
+            var rows = r.data || [];
+
+            if (!rows.length) {
+                list.appendChild(el('li', 'hint', 'Nothing here yet.'));
+                return;
+            }
+
+            rows.forEach(function (n) {
+                var li = el('li', n.read ? '' : 'unread');
+                var main = el('div', 'main');
+
+                main.appendChild(el('div', 'title', n.title));
+                main.appendChild(el('div', 'sub', n.message));
+                main.appendChild(el(
+                    'div',
+                    'sub',
+                    new Date(n.createdAt).toLocaleString()
+                ));
+
+                li.appendChild(main);
+
+                if (!n.read) {
                     var mark = el('button', 'link', 'Mark read');
 
                     mark.type = 'button';
@@ -1680,7 +1669,7 @@
     /* ---------- wiring ---------- */
 
     function wire() {
-        
+
         if ($('btnShowRegister')) {
             $('btnShowRegister').addEventListener('click', function () {
                 $('landingHero').hidden = true;
@@ -1741,7 +1730,7 @@
             });
         }
 
-        
+
         if ($('actionBtnAbroad')) {
             $('actionBtnAbroad').addEventListener('click', function () {
                 showView('abroad');
