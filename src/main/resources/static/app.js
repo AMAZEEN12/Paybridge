@@ -357,6 +357,9 @@
         if (name === 'abroad' && window.PayBridgeAbroad) {
             window.PayBridgeAbroad.open();
         }
+        if (name === 'wallets' && window.PayBridgeReceive) {
+            window.PayBridgeReceive.open();
+        }
     }
 
     /* ---------- home ---------- */
@@ -1884,6 +1887,7 @@
         friendly: friendly,
         el: el,
         clear: clear
+        loadAccounts: loadAccounts
     };
 
     wire();

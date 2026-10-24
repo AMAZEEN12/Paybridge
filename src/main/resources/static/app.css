@@ -1426,3 +1426,16 @@ button.secondary:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Receive money: the bank details of each wallet */
+.receive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.receive-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.receive-head { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--text-dark); }
+.receive-flag { font-size: 1.3rem; }
+.receive-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border-light); }
+.receive-label { flex: 0 0 40%; font-size: 0.78rem; color: #64748b; }
+.receive-value { flex: 1; font-weight: 700; font-size: 0.86rem; color: var(--text-dark); font-variant-numeric: tabular-nums; word-break: break-all; }
+.receive-copy { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 3px 9px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.receive-copy:hover { background: #f1f5f9; }
+.receive-sim { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px dashed var(--border-subtle); }
+.receive-sim input { width: 90px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
