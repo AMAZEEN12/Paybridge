@@ -1441,3 +1441,6 @@ button.secondary:hover {
 .receive-sim input { width: 90px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
 
 .wallet-acct-no { font-size: 0.78rem; color: #64748b; font-variant-numeric: tabular-nums; margin: 2px 0 8px; word-break: break-all; }
+
+.wallet-acct-detail { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-subtle); display: grid; gap: 4px; }
+.wallet-acct-line { font-size: 0.8rem; color: var(--text-dark); font-variant-numeric: tabular-nums; word-break: break-all; }

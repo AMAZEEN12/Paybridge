@@ -607,14 +607,37 @@
         detailsBtn.type = 'button';
         detailsBtn.addEventListener('click', function (e) {
             e.stopPropagation();
-            var p = $('receivePanel');
-            if (p) p.scrollIntoView({ behavior: 'smooth' });
-        });
-        actions.appendChild(detailsBtn);
 
-        card.appendChild(actions);
-        card.addEventListener('click', select);
-        return card;
+            var old = card.querySelector('.wallet-acct-detail');
+            if (old) {
+                card.removeChild(old);          // second click closes it
+                return;
+            }
+
+            api('/wallets/' + w.currency + '/funding-details').then(function (r) {
+                var d = r.data;
+                var box = el('div', 'wallet-acct-detail');
+
+                [
+                    ['Account name', d.accountName],
+                    ['Bank', d.bankName],
+                    ['Account number', d.accountNumber],
+                    [d.routingType === 'SORT_CODE' ? 'Sort code' : (d.routingType === 'ABA_ROUTING' ? 'Routing number' : 'Bank code'), d.routingValue],
+                    ['IBAN', d.iban],
+                    ['SWIFT / BIC', d.bic]
+                ].forEach(function (row) {
+                    if (row[1]) {
+                        box.appendChild(el('div', 'wallet-acct-line', row[0] + ': ' + row[1]));
+                    }
+                });
+
+                card.appendChild(box);
+            }, function (err) {
+                toast(err.status === 404
+                    ? 'Receiving details are not available for ' + w.currency + '.'
+                    : friendly(err), true);
+            });
+        });
     }
 
     function renderAllWalletsGrid() {
